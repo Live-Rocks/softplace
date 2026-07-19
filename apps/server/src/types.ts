@@ -30,6 +30,32 @@ export type CreateMemoryInput = {
   category: MemoryCategory;
 };
 
+export type RateLimitResult = {
+  allowed: boolean;
+  retryAfterSeconds: number;
+};
+
+export type DeepUsageReservation = {
+  reservationId: string | null;
+  reserved: boolean;
+  usage: UsageState;
+};
+
+export type CompleteChatSuccessInput = {
+  conversationId: string;
+  userContent: string;
+  userImagePresent: boolean;
+  assistantContent: string;
+  modelUsed: string;
+  mode: CompanionMode;
+  reservationId?: string | null;
+};
+
+export type CompleteChatSuccessResult = {
+  assistantMessage: Message;
+  usage: UsageState;
+};
+
 export type Repository = {
   getOrCreateProfile(user: Pick<AuthUser, "id" | "email">): Promise<AuthUser>;
   listConversations(userId: string): Promise<Conversation[]>;
@@ -49,5 +75,15 @@ export type Repository = {
   updateMemory(userId: string, memoryId: string, input: Partial<Pick<Memory, "content" | "category">>): Promise<Memory>;
   deleteMemory(userId: string, memoryId: string): Promise<void>;
   getUsage(userId: string, plan: Plan): Promise<UsageState>;
-  incrementUsage(userId: string, usage: { deep?: number }): Promise<UsageState>;
+  consumeChatRateLimit(
+    userId: string,
+    limits: { perMinute: number; perHour: number }
+  ): Promise<RateLimitResult>;
+  reserveDeepUsage(userId: string, plan: Plan, ttlSeconds: number): Promise<DeepUsageReservation>;
+  releaseDeepUsage(userId: string, reservationId: string): Promise<boolean>;
+  completeChatSuccess(
+    userId: string,
+    plan: Plan,
+    input: CompleteChatSuccessInput
+  ): Promise<CompleteChatSuccessResult>;
 };

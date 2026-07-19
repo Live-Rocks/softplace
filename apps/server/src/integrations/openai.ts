@@ -1,9 +1,15 @@
 import crypto from "node:crypto";
-import OpenAI from "openai";
+import OpenAI, { APIConnectionTimeoutError } from "openai";
 import type { AiProvider, CompanionMode, Message } from "@softplace/shared";
 import { config } from "../config.js";
 
-const client = config.openAiApiKey ? new OpenAI({ apiKey: config.openAiApiKey }) : null;
+const client = config.openAiApiKey
+  ? new OpenAI({
+      apiKey: config.openAiApiKey,
+      timeout: config.openAiTimeoutMs,
+      maxRetries: config.openAiMaxRetries
+    })
+  : null;
 
 export type GenerateCompanionReplyInput = {
   userId: string;
@@ -25,6 +31,13 @@ export class CompanionProviderError extends Error {
   constructor(cause: unknown) {
     super("陪伴服務暫時無法回覆，這次不會扣除額度。請稍後再試。", { cause });
     this.name = "CompanionProviderError";
+  }
+}
+
+export class CompanionProviderTimeoutError extends Error {
+  constructor(cause: unknown) {
+    super("這次回覆等得太久，沒有扣除額度，請再試一次。", { cause });
+    this.name = "CompanionProviderTimeoutError";
   }
 }
 
@@ -104,6 +117,9 @@ export async function generateCompanionReply(input: GenerateCompanionReplyInput)
       provider: "openai"
     };
   } catch (error) {
+    if (error instanceof APIConnectionTimeoutError) {
+      throw new CompanionProviderTimeoutError(error);
+    }
     throw new CompanionProviderError(error);
   }
 }

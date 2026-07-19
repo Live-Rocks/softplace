@@ -11,18 +11,28 @@ export function createRepository(): Repository {
   return supabaseAdmin ? createSupabaseRepository() : createMemoryRepository();
 }
 
-export function createMemoryRepository(): Repository {
-  const profiles = new Map<string, AuthUser>();
+export function createMemoryRepository(initialProfiles: AuthUser[] = []): Repository {
+  const profiles = new Map<string, AuthUser>(initialProfiles.map((profile) => [profile.id, profile]));
   const conversations = new Map<string, Conversation>();
   const messages = new Map<string, Message>();
   const memories = new Map<string, Memory>();
   const usages = new Map<string, UsageState>();
+  const rateLimitWindows = new Map<string, number>();
+  const reservations = new Map<
+    string,
+    {
+      userId: string;
+      month: string;
+      status: "active" | "completed" | "released";
+      expiresAt: number;
+    }
+  >();
 
   return {
     async getOrCreateProfile(user) {
       const existing = profiles.get(user.id);
       if (existing) return existing;
-      const profile: AuthUser = { id: user.id, email: user.email, plan: "plus" };
+      const profile: AuthUser = { id: user.id, email: user.email, plan: "free" };
       profiles.set(user.id, profile);
       return profile;
     },
@@ -137,17 +147,118 @@ export function createMemoryRepository(): Repository {
       usages.set(key, usage);
       return usage;
     },
-    async incrementUsage(userId, delta) {
-      const profile = profiles.get(userId);
-      const plan = profile?.plan ?? "plus";
+    async consumeChatRateLimit(userId, limits) {
+      const timestamp = Date.now();
+      const minuteStart = Math.floor(timestamp / 60_000) * 60_000;
+      const hourStart = Math.floor(timestamp / 3_600_000) * 3_600_000;
+      const minuteKey = `${userId}:minute:${minuteStart}`;
+      const hourKey = `${userId}:hour:${hourStart}`;
+      const minuteCount = rateLimitWindows.get(minuteKey) ?? 0;
+      const hourCount = rateLimitWindows.get(hourKey) ?? 0;
+
+      if (hourCount >= limits.perHour) {
+        return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((hourStart + 3_600_000 - timestamp) / 1000)) };
+      }
+      if (minuteCount >= limits.perMinute) {
+        return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((minuteStart + 60_000 - timestamp) / 1000)) };
+      }
+
+      rateLimitWindows.set(minuteKey, minuteCount + 1);
+      rateLimitWindows.set(hourKey, hourCount + 1);
+      return { allowed: true, retryAfterSeconds: 0 };
+    },
+    async reserveDeepUsage(userId, plan, ttlSeconds) {
       const key = `${userId}:${currentUsageMonth()}`;
       const usage = usages.get(key) ?? withPlanLimits(plan);
-      const updated = {
-        ...usage,
-        deepMessagesUsed: usage.deepMessagesUsed + (delta.deep ?? 0)
+      usages.set(key, usage);
+
+      const timestamp = Date.now();
+      for (const reservation of reservations.values()) {
+        if (reservation.status === "active" && reservation.expiresAt <= timestamp) {
+          reservation.status = "released";
+        }
+      }
+      const activeCount = [...reservations.values()].filter(
+        (reservation) =>
+          reservation.userId === userId &&
+          reservation.month === usage.month &&
+          reservation.status === "active" &&
+          reservation.expiresAt > timestamp
+      ).length;
+
+      if (usage.deepMessagesUsed + activeCount >= usage.deepMessagesLimit) {
+        return { reservationId: null, reserved: false, usage };
+      }
+
+      const reservationId = id();
+      reservations.set(reservationId, {
+        userId,
+        month: usage.month,
+        status: "active",
+        expiresAt: timestamp + ttlSeconds * 1000
+      });
+      return { reservationId, reserved: true, usage };
+    },
+    async releaseDeepUsage(userId, reservationId) {
+      const reservation = reservations.get(reservationId);
+      if (!reservation || reservation.userId !== userId || reservation.status !== "active") return false;
+      reservation.status = "released";
+      return true;
+    },
+    async completeChatSuccess(userId, plan, input) {
+      const conversation = conversations.get(input.conversationId);
+      if (!conversation || conversation.userId !== userId) throw new Error("conversation_not_found");
+
+      let usage = usages.get(`${userId}:${currentUsageMonth()}`) ?? withPlanLimits(plan);
+      let reservation:
+        | { userId: string; month: string; status: "active" | "completed" | "released"; expiresAt: number }
+        | undefined;
+
+      if (input.mode === "deep") {
+        if (!input.reservationId) throw new Error("deep_reservation_required");
+        reservation = reservations.get(input.reservationId);
+        if (!reservation || reservation.userId !== userId) throw new Error("reservation_not_found");
+        if (reservation.status !== "active") throw new Error("reservation_not_active");
+        if (reservation.expiresAt <= Date.now()) throw new Error("reservation_expired");
+        const usageKey = `${userId}:${reservation.month}`;
+        usage = usages.get(usageKey) ?? withPlanLimits(plan, { month: reservation.month });
+      } else if (input.reservationId) {
+        throw new Error("light_mode_cannot_use_reservation");
+      }
+
+      const userMessage: Message = {
+        id: id(),
+        conversationId: input.conversationId,
+        role: "user",
+        content: input.userContent,
+        modelUsed: null,
+        mode: null,
+        imagePresent: input.userImagePresent,
+        crisisDetected: false,
+        createdAt: now()
       };
-      usages.set(key, updated);
-      return updated;
+      const assistantMessage: Message = {
+        id: id(),
+        conversationId: input.conversationId,
+        role: "assistant",
+        content: input.assistantContent,
+        modelUsed: input.modelUsed,
+        mode: input.mode,
+        imagePresent: false,
+        crisisDetected: false,
+        createdAt: now()
+      };
+
+      if (reservation) {
+        usage = { ...usage, deepMessagesUsed: usage.deepMessagesUsed + 1 };
+        usages.set(`${userId}:${reservation.month}`, usage);
+        reservation.status = "completed";
+      }
+      messages.set(userMessage.id, userMessage);
+      messages.set(assistantMessage.id, assistantMessage);
+      conversation.updatedAt = now();
+
+      return { assistantMessage, usage };
     }
   };
 }
@@ -219,7 +330,7 @@ function createSupabaseRepository(): Repository {
 
       const { data, error } = await db
         .from("profiles")
-        .insert({ id: user.id, email: user.email, plan: "plus" })
+        .insert({ id: user.id, email: user.email, plan: "free" })
         .select("id,email,plan")
         .single();
       if (error?.code === "23505") {
@@ -347,29 +458,79 @@ function createSupabaseRepository(): Repository {
     async getUsage(userId, plan) {
       return getUsage(userId, plan);
     },
-    async incrementUsage(userId, delta) {
-      const { data: profile, error: profileError } = await db
-        .from("profiles")
-        .select("plan")
-        .eq("id", userId)
-        .single();
-      if (profileError) throw profileError;
-      const current = await getUsage(userId, profile.plan);
-      const next = {
-        user_id: userId,
-        month: current.month,
-        deep_messages_used: current.deepMessagesUsed + (delta.deep ?? 0)
-      };
+    async consumeChatRateLimit(userId, limits) {
       const { data, error } = await db
-        .from("usage_limits")
-        .upsert(next, { onConflict: "user_id,month" })
-        .select("month,deep_messages_used")
+        .rpc("consume_chat_rate_limit", {
+          p_user_id: userId,
+          p_minute_limit: limits.perMinute,
+          p_hour_limit: limits.perHour
+        })
         .single();
       if (error) throw error;
-      return withPlanLimits(profile.plan, {
-        month: data.month,
-        deepMessagesUsed: data.deep_messages_used
+      const row = data as any;
+      return {
+        allowed: Boolean(row.allowed),
+        retryAfterSeconds: Number(row.retry_after_seconds ?? 0)
+      };
+    },
+    async reserveDeepUsage(userId, plan, ttlSeconds) {
+      const { data, error } = await db
+        .rpc("reserve_deep_usage", {
+          p_user_id: userId,
+          p_ttl_seconds: ttlSeconds
+        })
+        .single();
+      if (error) throw error;
+      const row = data as any;
+      return {
+        reservationId: row.reservation_id,
+        reserved: Boolean(row.reserved),
+        usage: withPlanLimits(plan, {
+          month: row.usage_month,
+          deepMessagesUsed: row.deep_messages_used
+        })
+      };
+    },
+    async releaseDeepUsage(userId, reservationId) {
+      const { data, error } = await db.rpc("release_deep_usage", {
+        p_user_id: userId,
+        p_reservation_id: reservationId
       });
+      if (error) throw error;
+      return Boolean(data);
+    },
+    async completeChatSuccess(userId, plan, input) {
+      const { data, error } = await db
+        .rpc("complete_chat_success", {
+          p_user_id: userId,
+          p_conversation_id: input.conversationId,
+          p_user_content: input.userContent,
+          p_user_image_present: input.userImagePresent,
+          p_assistant_content: input.assistantContent,
+          p_model_used: input.modelUsed,
+          p_mode: input.mode,
+          p_reservation_id: input.reservationId ?? null
+        })
+        .single();
+      if (error) throw error;
+      const row = data as any;
+      return {
+        assistantMessage: {
+          id: row.assistant_id,
+          conversationId: row.assistant_conversation_id,
+          role: row.assistant_role,
+          content: row.assistant_content,
+          modelUsed: row.assistant_model_used,
+          mode: row.assistant_mode,
+          imagePresent: row.assistant_image_present,
+          crisisDetected: row.assistant_crisis_detected,
+          createdAt: row.assistant_created_at
+        },
+        usage: withPlanLimits(plan, {
+          month: row.usage_month,
+          deepMessagesUsed: row.deep_messages_used
+        })
+      };
     }
   };
 }
