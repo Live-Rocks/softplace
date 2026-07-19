@@ -77,6 +77,8 @@ npm run start:server
 
 Zeabur reads `zbpack.json` from the repository root, injects `PORT`, and starts only the Express API from this monorepo. Keep all server secrets in Zeabur environment variables rather than committed `.env` files. The health endpoint is `GET /health`.
 
+The current staging API is available at `https://softplace.zeabur.app`; verify a deployment with `GET https://softplace.zeabur.app/health`.
+
 ## Safety And Privacy
 
 - Crisis language is intercepted before any model request and points Taiwan users to `1925`, `119`, and `110`.
