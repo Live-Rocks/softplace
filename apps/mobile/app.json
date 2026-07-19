@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "SoftPlace",
+    "slug": "softplace",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "scheme": "softplace",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F1EA"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

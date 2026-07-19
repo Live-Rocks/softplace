@@ -1,0 +1,21 @@
+{
+  "name": "softplace-mvp",
+  "private": true,
+  "version": "0.2.0",
+  "packageManager": "npm@11.16.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:server": "npm --workspace apps/server run dev",
+    "dev:mobile": "npm --workspace apps/mobile run start",
+    "build:server": "npm --workspace apps/server run build",
+    "start:server": "npm --workspace apps/server run start",
+    "test": "npm --workspace apps/server run test",
+    "typecheck": "npm --workspace apps/server run typecheck && npm --workspace apps/mobile run typecheck"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}
