@@ -1,106 +1,298 @@
-import { HeartHandshake } from "lucide-react-native";
-import { useState } from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import type { AuthError } from "@supabase/supabase-js";
+import { CheckSquare2, HeartHandshake, Square } from "lucide-react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from "react-native";
 import { SoftButton } from "../components/SoftButton";
 import { isSupabaseConfigured, supabase } from "../integrations/supabase";
 import { colors } from "../theme/theme";
 
-export function LoginScreen() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [accepted, setAccepted] = useState(false);
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+type AuthStep = "email" | "verify";
+type FeedbackTone = "info" | "error";
+type AuthAction = "send" | "verify" | "resend";
 
-  async function submit() {
-    if (!supabase || !email.trim() || password.length < 6 || !accepted) return;
+const RESEND_COOLDOWN_SECONDS = 60;
+
+function getAuthErrorMessage(error: AuthError, action: AuthAction) {
+  switch (error.code) {
+    case "invalid_credentials":
+    case "otp_expired":
+      return action === "verify"
+        ? "驗證碼不正確或已失效，請確認後再試一次。"
+        : "這次無法寄出驗證碼，請稍後再試。";
+    case "over_email_send_rate_limit":
+      return "驗證信寄送得太頻繁了，請稍等一會兒再試。";
+    case "over_request_rate_limit":
+      return "操作太頻繁了，請稍等一會兒再試。";
+    case "email_address_invalid":
+      return "請輸入有效的 Email 地址。";
+    case "signup_disabled":
+      return "目前暫時無法建立新帳號。";
+    case "email_provider_disabled":
+    case "otp_disabled":
+      return "目前暫時無法使用 Email 驗證碼登入。";
+    default:
+      return action === "verify"
+        ? "這次沒有完成驗證，請稍後再試一次。"
+        : "這次沒有成功寄出驗證碼，請稍後再試。";
+  }
+}
+
+export function LoginScreen() {
+  const authRequestInFlight = useRef(false);
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [accepted, setAccepted] = useState(false);
+  const [step, setStep] = useState<AuthStep>("email");
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<FeedbackTone>("info");
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const timer = setTimeout(() => setResendSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [resendSeconds]);
+
+  function showMessage(text: string, tone: FeedbackTone = "info") {
+    setMessage(text);
+    setMessageTone(tone);
+  }
+
+  function showVerification(nextEmail: string) {
+    setVerificationEmail(nextEmail);
+    setOtp("");
+    setStep("verify");
+    setResendSeconds(RESEND_COOLDOWN_SECONDS);
+    showMessage("驗證碼已寄出，請到信箱查看。");
+  }
+
+  async function sendCode() {
+    if (!supabase || !email.trim() || !accepted || authRequestInFlight.current) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    authRequestInFlight.current = true;
     setLoading(true);
     setMessage("");
     try {
-      const credentials = { email: email.trim(), password };
-      const result =
-        mode === "login"
-          ? await supabase.auth.signInWithPassword(credentials)
-          : await supabase.auth.signUp(credentials);
+      const result = await supabase.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: { shouldCreateUser: true }
+      });
       if (result.error) {
-        setMessage(result.error.message);
+        showMessage(getAuthErrorMessage(result.error, "send"), "error");
         return;
       }
-      if (mode === "signup" && !result.data.session) {
-        setMessage("註冊完成。請先到信箱確認 Email，再回來登入。");
-      }
+      showVerification(normalizedEmail);
     } catch {
-      setMessage("目前無法連線，請確認網路後再試一次。");
+      showMessage("目前無法連線，請確認網路後再試一次。", "error");
     } finally {
+      authRequestInFlight.current = false;
       setLoading(false);
     }
   }
 
-  return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.wrap}>
-      <View style={styles.header}>
-        <HeartHandshake size={34} color={colors.accent} />
-        <Text style={styles.title}>SoftPlace</Text>
-        <Text style={styles.subtitle}>給暫時無處安放的情緒，一個可以先靠一下的地方。</Text>
-      </View>
+  async function verifyCode() {
+    if (!supabase || otp.length !== 6 || !verificationEmail || authRequestInFlight.current) return;
+    authRequestInFlight.current = true;
+    setLoading(true);
+    setMessage("");
+    try {
+      const result = await supabase.auth.verifyOtp({
+        email: verificationEmail,
+        token: otp,
+        type: "email"
+      });
+      if (result.error) {
+        showMessage(getAuthErrorMessage(result.error, "verify"), "error");
+        return;
+      }
+      if (!result.data.session) {
+        showMessage("驗證完成，但登入狀態尚未建立，請重新取得驗證碼。", "error");
+      }
+    } catch {
+      showMessage("目前無法連線，請確認網路後再試一次。", "error");
+    } finally {
+      authRequestInFlight.current = false;
+      setLoading(false);
+    }
+  }
 
-      <View style={styles.panel}>
-        {!isSupabaseConfigured ? (
-          <Text style={styles.error}>尚未設定 Supabase。請先填寫 apps/mobile/.env。</Text>
-        ) : null}
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@example.com"
-          placeholderTextColor={colors.softText}
-          style={styles.input}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <Text style={styles.label}>密碼</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="至少 6 個字元"
-          placeholderTextColor={colors.softText}
-          style={styles.input}
-          secureTextEntry
-        />
-        <Text style={styles.note}>
-          私密成人測試版。SoftPlace 不提供心理治療或診斷；如果有立即危險，請聯絡真人與當地緊急資源。
-        </Text>
-        <SoftButton
-          label={
-            !accepted
-              ? "我已滿 18 歲"
-              : mode === "login"
-                ? "登入 SoftPlace"
-                : "建立帳號"
-          }
-          icon={HeartHandshake}
-          onPress={accepted ? submit : () => setAccepted(true)}
-          loading={loading}
-          disabled={!isSupabaseConfigured || (accepted && (!email.trim() || password.length < 6))}
-        />
-        <SoftButton
-          label={mode === "login" ? "第一次使用？建立帳號" : "已經有帳號？回到登入"}
-          tone="quiet"
-          onPress={() => {
-            setMode((current) => (current === "login" ? "signup" : "login"));
-            setMessage("");
-          }}
-        />
-        {message ? <Text style={styles.message}>{message}</Text> : null}
-      </View>
+  async function resendCode() {
+    if (!supabase || !verificationEmail || resendSeconds > 0 || authRequestInFlight.current) return;
+    authRequestInFlight.current = true;
+    setResending(true);
+    setMessage("");
+    try {
+      const result = await supabase.auth.signInWithOtp({
+        email: verificationEmail,
+        options: { shouldCreateUser: false }
+      });
+      if (result.error) {
+        showMessage(getAuthErrorMessage(result.error, "resend"), "error");
+        return;
+      }
+      setResendSeconds(RESEND_COOLDOWN_SECONDS);
+      showMessage("新的驗證碼已寄出，請到信箱查看。");
+    } catch {
+      showMessage("目前無法連線，請確認網路後再試一次。", "error");
+    } finally {
+      authRequestInFlight.current = false;
+      setResending(false);
+    }
+  }
+
+  function changeEmail() {
+    setStep("email");
+    setEmail(verificationEmail);
+    setOtp("");
+    setVerificationEmail("");
+    setResendSeconds(0);
+    setMessage("");
+  }
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboardWrap}>
+      <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
+        <View style={styles.header}>
+          <HeartHandshake size={34} color={colors.accent} />
+          <Text style={styles.title}>SoftPlace</Text>
+          <Text style={styles.subtitle}>給暫時無處安放的情緒，一個可以先靠一下的地方。</Text>
+        </View>
+
+        <View style={styles.panel}>
+          {!isSupabaseConfigured ? (
+            <Text style={styles.error}>尚未設定 Supabase。請先填寫 apps/mobile/.env。</Text>
+          ) : null}
+
+          {step === "email" ? (
+            <>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                placeholderTextColor={colors.softText}
+                style={styles.input}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                returnKeyType="send"
+                textContentType="emailAddress"
+                onSubmitEditing={sendCode}
+              />
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: accepted }}
+                hitSlop={8}
+                onPress={() => setAccepted((current) => !current)}
+                style={({ pressed }) => [styles.ageRow, pressed && styles.pressed]}
+              >
+                {accepted ? (
+                  <CheckSquare2 size={22} color={colors.accent} />
+                ) : (
+                  <Square size={22} color={colors.muted} />
+                )}
+                <Text style={styles.ageLabel}>我已滿 18 歲</Text>
+              </Pressable>
+              <Text style={styles.note}>
+                私密成人測試版。SoftPlace 不提供心理治療或診斷；如果有立即危險，請聯絡真人與當地緊急資源。
+              </Text>
+              <SoftButton
+                label="寄送登入驗證碼"
+                icon={HeartHandshake}
+                onPress={sendCode}
+                loading={loading}
+                disabled={!isSupabaseConfigured || !email.trim() || !accepted}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.verifyTitle}>確認你的 Email</Text>
+              <Text style={styles.note}>驗證碼已寄到</Text>
+              <Text style={styles.verificationEmail}>{verificationEmail}</Text>
+              <Text style={styles.label}>六位數驗證碼</Text>
+              <TextInput
+                value={otp}
+                onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="000000"
+                placeholderTextColor={colors.softText}
+                style={[styles.input, styles.otpInput]}
+                autoComplete="one-time-code"
+                autoFocus
+                keyboardType="number-pad"
+                maxLength={6}
+                textContentType="oneTimeCode"
+              />
+              <SoftButton
+                label="確認並進入 SoftPlace"
+                icon={HeartHandshake}
+                onPress={verifyCode}
+                loading={loading}
+                disabled={otp.length !== 6}
+              />
+              <View style={styles.secondaryActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={resendSeconds > 0 || loading || resending}
+                  hitSlop={8}
+                  onPress={resendCode}
+                  style={({ pressed }) => pressed && styles.pressed}
+                >
+                  <Text
+                    style={[
+                      styles.textAction,
+                      (resendSeconds > 0 || loading || resending) && styles.textActionDisabled
+                    ]}
+                  >
+                    {resending
+                      ? "寄送中..."
+                      : resendSeconds > 0
+                        ? `${resendSeconds} 秒後可重新寄送`
+                        : "重新寄送驗證碼"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={loading || resending}
+                  hitSlop={8}
+                  onPress={changeEmail}
+                  style={({ pressed }) => pressed && styles.pressed}
+                >
+                  <Text style={[styles.textAction, (loading || resending) && styles.textActionDisabled]}>
+                    更換 Email
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+
+          {message ? (
+            <Text style={messageTone === "error" ? styles.error : styles.message}>{message}</Text>
+          ) : null}
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  keyboardWrap: {
     flex: 1,
+    backgroundColor: colors.bg
+  },
+  wrap: {
+    flexGrow: 1,
     backgroundColor: colors.bg,
     justifyContent: "center",
     padding: 24
@@ -135,6 +327,54 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     color: colors.ink,
     fontSize: 16
+  },
+  ageRow: {
+    minHeight: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 10
+  },
+  ageLabel: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "600"
+  },
+  otpInput: {
+    fontSize: 24,
+    fontWeight: "700",
+    letterSpacing: 8,
+    textAlign: "center"
+  },
+  verifyTitle: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: "800"
+  },
+  verificationEmail: {
+    color: colors.accentDark,
+    fontSize: 16,
+    fontWeight: "700"
+  },
+  secondaryActions: {
+    minHeight: 36,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16
+  },
+  textAction: {
+    color: colors.accentDark,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 22
+  },
+  textActionDisabled: {
+    color: colors.softText
+  },
+  pressed: {
+    opacity: 0.65
   },
   note: {
     color: colors.muted,
