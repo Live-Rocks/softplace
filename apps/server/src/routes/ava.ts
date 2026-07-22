@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { calculateReplyDueAt, getAvaAvailability } from "../domain/ava.js";
+import { calculateReplyDueAt, getAvaLifeContext } from "../domain/ava.js";
 import { assessCrisis, buildCrisisResponse } from "../domain/safety.js";
 import {
   deleteAvaMemory,
@@ -75,7 +75,8 @@ export function avaRouter() {
       if (state.dailyUsed >= state.dailyLimit) {
         return res.status(429).json({ error: "Ava 今天能回覆的訊息已經用完了，明天會再恢復。", code: "ava_daily_limit" });
       }
-      const dueAt = calculateReplyDueAt({ availability: getAvaAvailability(), lastAssistantAt: user.last_assistant_message_at });
+      const now = new Date();
+      const dueAt = calculateReplyDueAt({ lifeContext: getAvaLifeContext(now), lastAssistantAt: user.last_assistant_message_at, now });
       const message = await enqueueAvaMessage(req.user.id, content, dueAt);
       return res.status(202).json({ message, state: await getAvaState(req.user.id), crisisDetected: false });
     } catch (error) {

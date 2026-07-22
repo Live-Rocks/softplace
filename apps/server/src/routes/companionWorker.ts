@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { config } from "../config.js";
-import { buildAvaInput, buildAvaInstructions, extractSafeAvaMemory, relationshipStage } from "../domain/ava.js";
+import { buildAvaInput, buildAvaInstructions, extractSafeAvaMemory, getAvaLifeContext, relationshipStage } from "../domain/ava.js";
 import {
   claimAvaJobs,
   completeAvaJob,
@@ -33,10 +33,16 @@ export function companionWorkerRouter() {
         try {
           const context = await getAvaJobContext(job);
           const proactive = job.job_type === "proactive";
+          const currentLife = getAvaLifeContext();
+          const latestUser = proactive ? undefined : [...context.messages].reverse().find((message) => message.role === "user");
+          const receivedLife = latestUser ? getAvaLifeContext(new Date(latestUser.createdAt)) : undefined;
           const instructions = buildAvaInstructions({
             relationship: relationshipStage(context.user.relationship_started_at, context.user.reply_count),
             activity: context.daily.activity,
             moodNote: context.daily.mood_note,
+            receivedActivity: receivedLife?.currentActivity,
+            currentActivity: currentLife.currentActivity,
+            currentTone: currentLife.tone,
             memories: context.memories.map((memory) => memory.content),
             proactive
           });
@@ -48,7 +54,6 @@ export function companionWorkerRouter() {
           completed += 1;
 
           if (!proactive) {
-            const latestUser = [...context.messages].reverse().find((message) => message.role === "user");
             const memory = latestUser ? extractSafeAvaMemory(latestUser.content) : null;
             if (memory) {
               await saveAvaMemoryIfNew(job.user_id, memory, latestUser?.id).catch((error) => {

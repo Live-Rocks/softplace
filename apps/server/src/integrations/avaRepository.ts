@@ -10,8 +10,9 @@ import { config } from "../config.js";
 import {
   AVA_KEY,
   availabilityLabel,
+  canScheduleAvaProactiveAt,
   dailyLifeForDate,
-  getAvaAvailability,
+  getAvaLifeContext,
   relationshipStage,
   shouldScheduleProactive
 } from "../domain/ava.js";
@@ -94,7 +95,7 @@ export async function getAvaState(userId: string): Promise<AvaState> {
   if (jobs.error) throw jobs.error;
   if (unread.error) throw unread.error;
   if (usage.error) throw usage.error;
-  const availability = getAvaAvailability();
+  const availability = getAvaLifeContext().availability;
   return {
     companionKey: AVA_KEY,
     name: "Ava",
@@ -231,6 +232,10 @@ export async function getPushTokens(userId: string) {
 }
 
 export async function scheduleEligibleProactiveJobs() {
+  const now = new Date();
+  const lifeContext = getAvaLifeContext(now);
+  if (!canScheduleAvaProactiveAt(lifeContext)) return 0;
+
   const { data, error } = await admin().from("user_companions").select("*").eq("companion_key", AVA_KEY).neq("proactive_level", "off").limit(200);
   if (error) throw error;
   let scheduled = 0;
@@ -245,9 +250,12 @@ export async function scheduleEligibleProactiveJobs() {
       lastUserAt: row.last_user_message_at,
       pendingOrUnread: Boolean(pending.count || unread.count),
       quietStart: row.quiet_start,
-      quietEnd: row.quiet_end
+      quietEnd: row.quiet_end,
+      now
     })) continue;
-    const dueAt = new Date(Date.now() + (2 + Math.random() * 8) * 60_000).toISOString();
+    const maxDelaySeconds = Math.min(10 * 60, Math.max(2 * 60, lifeContext.minutesUntilTransition * 60 - 60));
+    const delaySeconds = 2 * 60 + Math.random() * (maxDelaySeconds - 2 * 60);
+    const dueAt = new Date(now.getTime() + delaySeconds * 1000).toISOString();
     const inserted = await admin().from("companion_jobs").insert({ user_id: row.user_id, companion_key: AVA_KEY, job_type: "proactive", due_at: dueAt, payload: {} });
     if (!inserted.error) scheduled += 1;
   }
