@@ -15,6 +15,7 @@ import type { AvaMessage, AvaState } from "@softplace/shared";
 import { api } from "../api/client";
 import { SoftButton } from "../components/SoftButton";
 import { colors } from "../theme/theme";
+import { splitAvaBubbleSegments } from "../utils/avaBubbleSegments";
 
 type Props = {
   accessToken: string;
@@ -121,12 +122,27 @@ export function AvaScreen({ accessToken, active, onUnreadCountChange }: Props) {
             </View>
           )
         }
-        renderItem={({ item }) => (
-          <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.avaBubble]}>
-            {item.proactive ? <Text style={styles.proactive}>Ava 主動傳來</Text> : null}
-            <Text style={[styles.messageText, item.role === "user" && styles.userText]}>{item.content}</Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          if (item.role === "user") {
+            return (
+              <View style={[styles.bubble, styles.userBubble]}>
+                <Text style={[styles.messageText, styles.userText]}>{item.content}</Text>
+              </View>
+            );
+          }
+
+          const segments = splitAvaBubbleSegments(item.content);
+          return (
+            <View style={styles.avaBubbleGroup}>
+              {segments.map((segment, index) => (
+                <View key={`${item.id}-${index}`} style={[styles.bubble, styles.avaBubble]}>
+                  {item.proactive && index === 0 ? <Text style={styles.proactive}>Ava 主動傳來</Text> : null}
+                  <Text style={styles.messageText}>{segment}</Text>
+                </View>
+              ))}
+            </View>
+          );
+        }}
       />
 
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
@@ -151,8 +167,9 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", justifyContent: "center", padding: 40, gap: 8 },
   emptyTitle: { color: colors.ink, fontSize: 17, fontWeight: "800" },
   emptyText: { color: colors.muted, lineHeight: 21, textAlign: "center" },
-  bubble: { maxWidth: "86%", borderRadius: 8, padding: 13, borderWidth: 1 },
-  userBubble: { alignSelf: "flex-end", backgroundColor: colors.accent, borderColor: colors.accent },
+  bubble: { borderRadius: 8, padding: 13, borderWidth: 1 },
+  userBubble: { alignSelf: "flex-end", maxWidth: "86%", backgroundColor: colors.accent, borderColor: colors.accent },
+  avaBubbleGroup: { alignSelf: "flex-start", maxWidth: "86%", gap: 5 },
   avaBubble: { alignSelf: "flex-start", backgroundColor: colors.surface, borderColor: colors.line },
   messageText: { color: colors.ink, fontSize: 15, lineHeight: 22 },
   userText: { color: "#fff" },
