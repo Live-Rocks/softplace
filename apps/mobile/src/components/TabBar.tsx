@@ -13,10 +13,11 @@ const tabs = [
 
 type Props = {
   active: AppTab;
+  avaUnreadCount: number;
   onChange: (tab: AppTab) => void;
 };
 
-export function TabBar({ active, onChange }: Props) {
+export function TabBar({ active, avaUnreadCount, onChange }: Props) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -24,9 +25,19 @@ export function TabBar({ active, onChange }: Props) {
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = active === tab.key;
+        const hasUnread = tab.key === "ava" && avaUnreadCount > 0;
         return (
-          <Pressable key={tab.key} style={styles.item} onPress={() => onChange(tab.key)}>
-            <Icon size={20} color={isActive ? colors.accentDark : colors.softText} />
+          <Pressable
+            accessibilityLabel={`${tab.label}${hasUnread ? "，有未讀訊息" : ""}`}
+            accessibilityRole="button"
+            key={tab.key}
+            style={styles.item}
+            onPress={() => onChange(tab.key)}
+          >
+            <View style={styles.iconWrap}>
+              <Icon size={20} color={isActive ? colors.accentDark : colors.softText} />
+              {hasUnread ? <View style={styles.unreadDot} /> : null}
+            </View>
             <Text style={[styles.label, isActive && styles.active]}>{tab.label}</Text>
           </Pressable>
         );
@@ -49,6 +60,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 4
+  },
+  iconWrap: {
+    alignItems: "center",
+    height: 20,
+    justifyContent: "center",
+    position: "relative",
+    width: 20
+  },
+  unreadDot: {
+    backgroundColor: colors.rose,
+    borderColor: colors.surface,
+    borderRadius: 5,
+    borderWidth: 2,
+    height: 10,
+    position: "absolute",
+    right: -4,
+    top: -4,
+    width: 10
   },
   label: {
     color: colors.softText,

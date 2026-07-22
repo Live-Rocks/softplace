@@ -16,9 +16,13 @@ import { api } from "../api/client";
 import { SoftButton } from "../components/SoftButton";
 import { colors } from "../theme/theme";
 
-type Props = { accessToken: string; active: boolean };
+type Props = {
+  accessToken: string;
+  active: boolean;
+  onUnreadCountChange: (count: number) => void;
+};
 
-export function AvaScreen({ accessToken, active }: Props) {
+export function AvaScreen({ accessToken, active, onUnreadCountChange }: Props) {
   const [messages, setMessages] = useState<AvaMessage[]>([]);
   const [state, setState] = useState<AvaState | null>(null);
   const [text, setText] = useState("");
@@ -32,16 +36,22 @@ export function AvaScreen({ accessToken, active }: Props) {
     try {
       const response = await api.avaMessages(accessToken);
       setMessages(response.messages);
-      setState(response.state);
       setNotice("");
-      if (active && response.state.unreadCount) await api.markAvaRead(accessToken);
+      if (active && response.state.unreadCount) {
+        await api.markAvaRead(accessToken);
+        setState({ ...response.state, unreadCount: 0 });
+        onUnreadCountChange(0);
+      } else {
+        setState(response.state);
+        onUnreadCountChange(response.state.unreadCount);
+      }
       setTimeout(() => listRef.current?.scrollToEnd({ animated: !quiet }), 40);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "暫時無法載入 Ava。");
     } finally {
       if (!quiet) setLoading(false);
     }
-  }, [accessToken, active]);
+  }, [accessToken, active, onUnreadCountChange]);
 
   useEffect(() => {
     if (!active) return;
@@ -74,6 +84,7 @@ export function AvaScreen({ accessToken, active }: Props) {
         ...(response.assistantMessage ? [response.assistantMessage] : [])
       ]);
       setState(response.state);
+      onUnreadCountChange(0);
     } catch (error) {
       setMessages((current) => current.filter((message) => message.id !== local.id));
       setText(content);
@@ -118,7 +129,6 @@ export function AvaScreen({ accessToken, active }: Props) {
         )}
       />
 
-      {state?.pendingReply ? <Text style={styles.pending}>Ava 晚點回你</Text> : null}
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
       <View style={styles.composer}>
         <TextInput value={text} onChangeText={setText} style={styles.input} multiline maxLength={4000} />
@@ -147,7 +157,6 @@ const styles = StyleSheet.create({
   messageText: { color: colors.ink, fontSize: 15, lineHeight: 22 },
   userText: { color: "#fff" },
   proactive: { color: colors.rose, fontSize: 11, fontWeight: "700", marginBottom: 5 },
-  pending: { color: colors.softText, fontSize: 12, paddingHorizontal: 16, paddingVertical: 7 },
   notice: { color: colors.warning, paddingHorizontal: 16, paddingVertical: 7 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, padding: 12, borderTopWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
   input: { flex: 1, minHeight: 48, maxHeight: 118, borderWidth: 1, borderColor: colors.line, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, color: colors.ink, backgroundColor: colors.bg }
