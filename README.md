@@ -1,97 +1,94 @@
-# SoftPlace v0.2
+# SoftPlace
 
-SoftPlace is a private 18+ AI emotional companionship beta. It is a temporary emotional holding space, not psychotherapy, diagnosis, an AI romantic partner, adult chat, or a public community.
+SoftPlace 是一個私密的 18+ AI 情緒陪伴 App。核心角色「安放」提供即時情緒承接；Ava 則是在同一個 App 內，測試具有生活節奏、延遲回覆與主動訊息的長期陪伴方式。
 
-## Implemented
+目前專案處於本人使用與少量封測前的 staging 階段，不是心理治療、診斷服務、公開社群或正式付費產品。最新完成度、限制與 roadmap 以 [專案狀態](docs/PROJECT_STATUS.md) 為準。
 
-- Expo React Native + TypeScript mobile app.
-- Node.js + Express API server.
-- Supabase Email/password Auth and Postgres persistence.
-- One continuous conversation per user with cursor-paginated history.
-- OpenAI Responses API with `store: false` and a hashed `safety_identifier`.
-- Light mode defaults to `gpt-4o-mini`; the persistent deep-mode switch uses `gpt-5.4-mini`.
-- User-confirmed memories, image input, usage limits, provider transparency, and crisis mode.
-- The model receives only the most recent 20 messages plus confirmed memories.
-- Reply length adapts by mode: concise but complete in light mode, with more room to explore in deep mode.
-- Image replies identify concrete visible details first, then connect them back to the user's experience.
+## 技術棧
 
-## Setup
+- Mobile：Expo React Native、TypeScript、Supabase Auth
+- API：Node.js 24、Express、TypeScript
+- Data：Supabase Postgres、RLS、RPC、Vault、Cron
+- AI：OpenAI Responses API
+- Deploy：GitHub private repository、Zeabur
+- Email：Resend SMTP、Supabase Passwordless Email OTP
 
-Requires Node.js 20 or newer.
+## Monorepo
+
+```text
+apps/mobile/               Expo App
+apps/server/               Express API、OpenAI 與 Worker
+packages/shared/           Mobile／Server 共用型別
+supabase/migrations/       001～007 資料庫 migration
+docs/                      產品、架構、狀態、維運與決策文件
+zbpack.json                Zeabur build／start 設定
+```
+
+## 本機設定
+
+需求：Node.js `24.x`、npm `11.x`。
 
 ```bash
-npm install
+cd "/Users/a1/Documents/Codex/2026-06-27/ji3"
+nvm use system
+npm ci
 cp apps/server/.env.example apps/server/.env
 cp apps/mobile/.env.example apps/mobile/.env
 ```
 
-Create a Supabase project and run every SQL migration in order:
+在 Supabase SQL Editor 依序執行 `supabase/migrations/001_*.sql` 到 `007_*.sql`。把實際 credential 填入兩份 `.env`；OpenAI key 與 Supabase service-role key 只能放在 server，不能放進 mobile。
 
-```text
-supabase/migrations/001_softplace_mvp.sql
-supabase/migrations/002_single_conversation.sql
-supabase/migrations/003_remove_image_usage.sql
-supabase/migrations/004_expand_memory_content.sql
-```
+## 啟動
 
-Set the server environment:
+Server：
 
 ```bash
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=...
-AI_PROVIDER=openai
-OPENAI_API_KEY=...
-OPENAI_DEEP_MODEL=gpt-5.4-mini
-OPENAI_LIGHT_MODEL=gpt-4o-mini
-OPENAI_STORE_RESPONSES=false
-OPENAI_DEBUG_IO=false
-```
-
-Set the mobile environment. Use the Mac's LAN IP instead of `localhost` when testing on a physical phone:
-
-```bash
-EXPO_PUBLIC_API_BASE_URL=http://192.168.x.x:8787
-EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=...
-```
-
-The service-role key and OpenAI key must never be placed in the mobile environment.
-
-## Run
-
-```bash
+cd "/Users/a1/Documents/Codex/2026-06-27/ji3"
+nvm use system
 npm run dev:server
-npm run dev:mobile
 ```
 
-For an explicit no-cost local reply mode, set `AI_PROVIDER=local`. Missing OpenAI credentials never silently fall back to local replies.
+Mobile／Expo Go：
 
-## Production Server
+```bash
+cd "/Users/a1/Documents/Codex/2026-06-27/ji3/apps/mobile"
+nvm use system
+npm run start -- --host lan --clear
+```
 
-The production server commands used by Zeabur are:
+實機使用 Expo Go 時，`EXPO_PUBLIC_API_BASE_URL` 必須是 Zeabur HTTPS 網址，或同一區網內 Mac 的 LAN IP，不能使用手機自己的 `localhost`。
+
+## 驗證
+
+```bash
+npm run typecheck
+npm run test --workspace apps/mobile
+npm test
+npm run build:server
+```
+
+Production server：
 
 ```bash
 npm run build:server
 npm run start:server
+curl https://softplace.zeabur.app/health
 ```
 
-Zeabur reads `zbpack.json` from the repository root, injects `PORT`, and starts only the Express API from this monorepo. Keep all server secrets in Zeabur environment variables rather than committed `.env` files. The health endpoint is `GET /health`.
+## 目前模型
 
-The current staging API is available at `https://softplace.zeabur.app`; verify a deployment with `GET https://softplace.zeabur.app/health`.
+- 安放輕量模式：`gpt-4o-mini`
+- 安放深度模式：`gpt-5.4-mini`
+- Ava：`gpt-5.4-mini`
 
-## Safety And Privacy
+模型名稱由 server 環境變數控制。OpenAI Responses 預設 `store:false`；安放每次只送最近 20 則訊息與已確認記憶。
 
-- Crisis language is intercepted before any model request and points Taiwan users to `1925`, `119`, and `110`.
-- Images are processed but not permanently stored; only `image_present` is saved.
-- Memories are limited to `preference` and `emotional_context`, require confirmation, and remain editable and deletable.
-- Sensitive identifiers, diagnoses, negative personality labels, and self-harm details are rejected as memories.
-- Automatic summaries, embeddings, vector stores, and RAG are intentionally out of scope for v0.2.
+## 文件索引
 
-## Verification
+- [產品定義](docs/PRODUCT.md)：問題、使用者、產品信念與邊界
+- [系統架構](docs/ARCHITECTURE.md)：服務責任、資料流、API 與資料所有權
+- [專案狀態](docs/PROJECT_STATUS.md)：完成度、限制與 roadmap 的唯一來源
+- [維運手冊](docs/OPERATIONS.md)：環境變數、部署、Cron、SMTP、故障排除與 rollback
+- [技術決策](docs/DECISIONS.md)：現有架構選擇及其原因
 
-```bash
-npm run typecheck
-npm test
-```
-
-Tests cover requested light/deep modes, quota fallback, image limits, crisis detection, memory filtering, 20-message context, provider reporting, and failed-provider requests not consuming quota.
+功能行為改變時，請在同一個 commit 更新對應文件；部署流程改變時，同步更新 `docs/OPERATIONS.md`。
