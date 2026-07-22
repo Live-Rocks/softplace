@@ -80,3 +80,56 @@ export type ApiErrorBody = {
   error: string;
   code?: string;
 };
+
+export type AvaAvailability = "available" | "busy" | "resting";
+
+export type AvaProactiveLevel = "off" | "low" | "normal";
+
+export type AvaMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  proactive: boolean;
+  createdAt: string;
+  readAt?: string | null;
+};
+
+export type AvaMemory = {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AvaPreferences = {
+  proactiveLevel: AvaProactiveLevel;
+  quietStart: string;
+  quietEnd: string;
+  timezone: string;
+};
+
+export type AvaState = {
+  companionKey: "ava";
+  name: "Ava";
+  availability: AvaAvailability;
+  statusLabel: "有空" | "在忙" | "休息了";
+  relationshipStage: "new" | "familiar" | "close";
+  pendingReply: boolean;
+  unreadCount: number;
+  dailyUsed: number;
+  dailyLimit: number;
+  preferences: AvaPreferences;
+};
+
+export type AvaMessagesResponse = {
+  messages: AvaMessage[];
+  nextCursor: string | null;
+  state: AvaState;
+};
+
+export type AvaSendResponse = {
+  message: AvaMessage;
+  assistantMessage?: AvaMessage;
+  state: AvaState;
+  crisisDetected: boolean;
+};

@@ -1,4 +1,4 @@
-import { Home, MessageCircle, Settings, Sparkles } from "lucide-react-native";
+import { Heart, Home, MessageCircle, Settings } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../theme/theme";
@@ -7,7 +7,7 @@ import type { AppTab } from "../types";
 const tabs = [
   { key: "home", label: "入口", icon: Home },
   { key: "chat", label: "聊天", icon: MessageCircle },
-  { key: "memories", label: "記憶", icon: Sparkles },
+  { key: "ava", label: "Ava", icon: Heart },
   { key: "settings", label: "設定", icon: Settings }
 ] as const;
 

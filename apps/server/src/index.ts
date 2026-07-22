@@ -8,6 +8,9 @@ import { chatRouter } from "./routes/chat.js";
 import { conversationsRouter } from "./routes/conversations.js";
 import { memoriesRouter } from "./routes/memories.js";
 import { usageRouter } from "./routes/usage.js";
+import { avaRouter } from "./routes/ava.js";
+import { companionWorkerRouter } from "./routes/companionWorker.js";
+import { pushTokensRouter } from "./routes/pushTokens.js";
 
 assertRuntimeConfig();
 
@@ -21,11 +24,15 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "softplace-server" });
 });
 
+app.use("/internal/companion", companionWorkerRouter());
+
 app.use("/api", requireAuth(repository));
 app.use("/api/chat", chatRouter(repository));
 app.use("/api/conversations", conversationsRouter(repository));
 app.use("/api/memories", memoriesRouter(repository));
 app.use("/api/me/usage", usageRouter(repository));
+app.use("/api/companions/ava", avaRouter());
+app.use("/api/push-tokens", pushTokensRouter());
 
 const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   if (error instanceof ZodError) {

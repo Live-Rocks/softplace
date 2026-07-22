@@ -4,6 +4,8 @@ import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { AiProvider, UsageState } from "@softplace/shared";
 import { api } from "../api/client";
 import { SoftButton } from "../components/SoftButton";
+import { AvaSettings } from "../components/AvaSettings";
+import { MemoriesScreen } from "./MemoriesScreen";
 import { supabase } from "../integrations/supabase";
 import { colors } from "../theme/theme";
 
@@ -74,7 +76,7 @@ export function SettingsScreen({ accessToken, email, onConversationCleared }: Pr
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>聊天資料</Text>
-        <Text style={styles.muted}>清除後無法復原。已確認的記憶會保留，仍可到記憶頁個別刪除。</Text>
+        <Text style={styles.muted}>清除後無法復原。已確認的記憶會保留，仍可在下方個別刪除。</Text>
         <SoftButton
           label="清除所有聊天內容"
           icon={Trash2}
@@ -86,6 +88,14 @@ export function SettingsScreen({ accessToken, email, onConversationCleared }: Pr
             ])
           }
         />
+      </View>
+
+      <View style={styles.section}>
+        <MemoriesScreen accessToken={accessToken} embedded />
+      </View>
+
+      <View style={styles.section}>
+        <AvaSettings accessToken={accessToken} />
       </View>
 
       <View style={styles.section}>

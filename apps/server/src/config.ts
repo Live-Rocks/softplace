@@ -9,13 +9,23 @@ export const config = {
   openAiApiKey: process.env.OPENAI_API_KEY ?? "",
   openAiDeepModel: process.env.OPENAI_DEEP_MODEL ?? "gpt-5.4-mini",
   openAiLightModel: process.env.OPENAI_LIGHT_MODEL ?? "gpt-4o-mini",
+  openAiLifeModel: process.env.OPENAI_LIFE_MODEL ?? "gpt-5.4-mini",
   openAiStoreResponses: parseBooleanEnv(process.env.OPENAI_STORE_RESPONSES),
   openAiDebugIo: parseBooleanEnv(process.env.OPENAI_DEBUG_IO),
   openAiTimeoutMs: parsePositiveIntegerEnv(process.env.OPENAI_TIMEOUT_MS, 60_000),
   openAiMaxRetries: parseNonNegativeIntegerEnv(process.env.OPENAI_MAX_RETRIES, 0),
   chatRateLimitPerMinute: parsePositiveIntegerEnv(process.env.CHAT_RATE_LIMIT_PER_MINUTE, 12),
   chatRateLimitPerHour: parsePositiveIntegerEnv(process.env.CHAT_RATE_LIMIT_PER_HOUR, 120),
-  deepReservationTtlSeconds: parsePositiveIntegerEnv(process.env.DEEP_RESERVATION_TTL_SECONDS, 120)
+  deepReservationTtlSeconds: parsePositiveIntegerEnv(process.env.DEEP_RESERVATION_TTL_SECONDS, 120),
+  avaFeatureEnabled: parseBooleanEnv(process.env.AVA_FEATURE_ENABLED),
+  avaBetaUserIds: new Set(
+    (process.env.AVA_BETA_USER_IDS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+  ),
+  avaDailyLimit: parsePositiveIntegerEnv(process.env.AVA_DAILY_LIMIT, 30),
+  companionWorkerSecret: process.env.COMPANION_WORKER_SECRET ?? ""
 };
 
 function parseBooleanEnv(value: string | undefined) {
@@ -42,5 +52,8 @@ export function assertRuntimeConfig() {
   }
   if (config.aiProvider === "openai" && !config.openAiApiKey) {
     throw new Error("OPENAI_API_KEY is required when AI_PROVIDER=openai.");
+  }
+  if (config.avaFeatureEnabled && !config.companionWorkerSecret) {
+    throw new Error("COMPANION_WORKER_SECRET is required when AVA_FEATURE_ENABLED=true.");
   }
 }

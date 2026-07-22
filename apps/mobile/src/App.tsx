@@ -6,7 +6,7 @@ import { TabBar } from "./components/TabBar";
 import { ChatScreen } from "./screens/ChatScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
-import { MemoriesScreen } from "./screens/MemoriesScreen";
+import { AvaScreen } from "./screens/AvaScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { supabase } from "./integrations/supabase";
 import { colors } from "./theme/theme";
@@ -44,6 +44,7 @@ function AppContent() {
     });
     return () => data.subscription.unsubscribe();
   }, []);
+
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -94,8 +95,8 @@ function AppContent() {
             onInitialPromptConsumed={() => setInitialPrompt(undefined)}
           />
         </View>
-        <View style={[styles.screen, tab !== "memories" && styles.hidden]}>
-          <MemoriesScreen accessToken={token} />
+        <View style={[styles.screen, tab !== "ava" && styles.hidden]}>
+          <AvaScreen accessToken={token} active={tab === "ava"} />
         </View>
         <View style={[styles.screen, tab !== "settings" && styles.hidden]}>
           <SettingsScreen
@@ -105,7 +106,7 @@ function AppContent() {
           />
         </View>
       </View>
-      {tab === "chat" && keyboardVisible ? null : <TabBar active={tab} onChange={setTab} />}
+      {(tab === "chat" || tab === "ava") && keyboardVisible ? null : <TabBar active={tab} onChange={setTab} />}
     </SafeAreaView>
   );
 }

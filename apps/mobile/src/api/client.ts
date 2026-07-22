@@ -1,4 +1,9 @@
 import type {
+  AvaMemory,
+  AvaMessagesResponse,
+  AvaPreferences,
+  AvaSendResponse,
+  AvaState,
   ChatRequest,
   ChatResponse,
   ConversationMessagesResponse,
@@ -59,5 +64,25 @@ export const api = {
   updateMemory: (memoryId: string, memory: Partial<Memory>, token: string) =>
     apiRequest<{ memory: Memory }>(`/api/memories/${memoryId}`, { method: "PATCH", body: memory, token }),
   deleteMemory: (memoryId: string, token: string) =>
-    apiRequest<void>(`/api/memories/${memoryId}`, { method: "DELETE", token })
+    apiRequest<void>(`/api/memories/${memoryId}`, { method: "DELETE", token }),
+  ava: (token: string) => apiRequest<{ state: AvaState }>("/api/companions/ava", { token }),
+  avaMessages: (token: string, before?: string) => {
+    const query = new URLSearchParams({ limit: "50" });
+    if (before) query.set("before", before);
+    return apiRequest<AvaMessagesResponse>(`/api/companions/ava/messages?${query}`, { token });
+  },
+  sendAvaMessage: (content: string, token: string) =>
+    apiRequest<AvaSendResponse>("/api/companions/ava/messages", { method: "POST", body: { content }, token }),
+  markAvaRead: (token: string) => apiRequest<void>("/api/companions/ava/read", { method: "POST", token }),
+  updateAvaPreferences: (preferences: Partial<AvaPreferences>, token: string) =>
+    apiRequest<{ state: AvaState }>("/api/companions/ava/preferences", { method: "PATCH", body: preferences, token }),
+  deleteAvaRelationship: (token: string) =>
+    apiRequest<void>("/api/companions/ava/relationship", { method: "DELETE", token }),
+  avaMemories: (token: string) => apiRequest<{ memories: AvaMemory[] }>("/api/companions/ava/memories", { token }),
+  updateAvaMemory: (memoryId: string, content: string, token: string) =>
+    apiRequest<{ memory: AvaMemory }>(`/api/companions/ava/memories/${memoryId}`, { method: "PATCH", body: { content }, token }),
+  deleteAvaMemory: (memoryId: string, token: string) =>
+    apiRequest<void>(`/api/companions/ava/memories/${memoryId}`, { method: "DELETE", token }),
+  registerPushToken: (pushToken: string, platform: "android" | "ios", token: string) =>
+    apiRequest<void>("/api/push-tokens", { method: "POST", body: { token: pushToken, platform }, token })
 };

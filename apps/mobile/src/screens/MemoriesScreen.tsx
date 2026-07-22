@@ -8,11 +8,12 @@ import { colors } from "../theme/theme";
 
 type Props = {
   accessToken: string;
+  embedded?: boolean;
 };
 
 const memoryMaxLength = 300;
 
-export function MemoriesScreen({ accessToken }: Props) {
+export function MemoriesScreen({ accessToken, embedded = false }: Props) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [content, setContent] = useState("");
   const [category, setCategory] = useState<MemoryCategory>("preference");
@@ -62,8 +63,8 @@ export function MemoriesScreen({ accessToken }: Props) {
     await load();
   }
 
-  return (
-    <ScrollView style={styles.wrap} contentContainerStyle={styles.content}>
+  const contentView = (
+    <>
       <View style={styles.header}>
         <Text style={styles.title}>我記得的事</Text>
         <Text style={styles.subtitle}>只保存你確認過的陪伴偏好與重要情緒脈絡。每一條都可以刪除。</Text>
@@ -109,8 +110,11 @@ export function MemoriesScreen({ accessToken }: Props) {
         ))}
         {!memories.length ? <Text style={styles.empty}>目前還沒有記憶。聊天時你確認後，我才會記住。</Text> : null}
       </View>
-    </ScrollView>
+    </>
   );
+
+  if (embedded) return <View style={styles.embedded}>{contentView}</View>;
+  return <ScrollView style={styles.wrap} contentContainerStyle={styles.content}>{contentView}</ScrollView>;
 }
 
 const styles = StyleSheet.create({
@@ -120,6 +124,9 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+    gap: 20
+  },
+  embedded: {
     gap: 20
   },
   header: {

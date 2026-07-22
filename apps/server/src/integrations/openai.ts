@@ -124,6 +124,33 @@ export async function generateCompanionReply(input: GenerateCompanionReplyInput)
   }
 }
 
+export async function generateAvaReply(input: {
+  userId: string;
+  instructions: string;
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+}) {
+  if (config.aiProvider === "local") {
+    return "剛剛看到你傳來的訊息了。今天這邊有點忙亂，但我想先停一下回你。";
+  }
+  if (!client) throw new CompanionProviderError(new Error("OPENAI_API_KEY is not configured"));
+
+  try {
+    const response = await client.responses.create({
+      model: config.openAiLifeModel,
+      instructions: input.instructions,
+      input: input.messages,
+      store: config.openAiStoreResponses,
+      safety_identifier: hashUserId(input.userId)
+    } as any);
+    const content = response.output_text?.trim();
+    if (!content) throw new Error("empty_ava_response");
+    return content;
+  } catch (error) {
+    if (error instanceof APIConnectionTimeoutError) throw new CompanionProviderTimeoutError(error);
+    throw new CompanionProviderError(error);
+  }
+}
+
 export function buildRecentMessages(history: Message[]) {
   return history.slice(-20).map((message) => ({
     role: message.role === "assistant" ? ("assistant" as const) : ("user" as const),

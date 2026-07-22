@@ -1,6 +1,6 @@
 import type { Message, PendingMemorySuggestion } from "@softplace/shared";
 
-export type AppTab = "home" | "chat" | "memories" | "settings";
+export type AppTab = "home" | "chat" | "ava" | "settings";
 
 export type LocalMessage = Message | {
   id: string;
@@ -13,4 +13,3 @@ export type LocalMessage = Message | {
 export type PendingMemory = PendingMemorySuggestion & {
   id: string;
 };
-
