@@ -1,19 +1,23 @@
 import { Router } from "express";
 import { config } from "../config.js";
 import { buildAvaInput, buildAvaInstructions, extractSafeAvaMemory, getAvaLifeContext, relationshipStage } from "../domain/ava.js";
+import { eventBackgroundFallback } from "../domain/avaEvents.js";
 import {
+  claimAvaDailyEventDetail,
   claimAvaJobs,
+  completeAvaDailyEventDetail,
   completeAvaJob,
   getAvaJobContext,
   getPushTokens,
   newWorkerToken,
+  releaseAvaDailyEventDetail,
   retryAvaJob,
   saveAvaMemoryIfNew,
   ensureAvaDailyState,
   scheduleEligibleProactiveJobs
 } from "../integrations/avaRepository.js";
 import { sendAvaPush } from "../integrations/expoPush.js";
-import { generateAvaReply } from "../integrations/openai.js";
+import { generateAvaEventDetail, generateAvaReply } from "../integrations/openai.js";
 
 export function companionWorkerRouter() {
   const router = Router();
@@ -45,6 +49,10 @@ export function companionWorkerRouter() {
             receivedActivity: receivedLife?.currentActivity,
             currentActivity: currentLife.currentActivity,
             currentTone: currentLife.tone,
+            eventBackground: context.daily.event_detail ?? eventBackgroundFallback({
+              activity: context.daily.skeleton_activity ?? context.daily.activity,
+              moodNote: context.daily.skeleton_mood_note ?? context.daily.mood_note
+            }),
             memories: context.memories.map((memory) => memory.content),
             proactive
           });
@@ -70,6 +78,21 @@ export function companionWorkerRouter() {
           });
         } catch (error) {
           await retryAvaJob(job.id, workerToken, error instanceof Error ? error.message : "worker_failed");
+        }
+      }
+
+      const detailTask = await claimAvaDailyEventDetail();
+      if (detailTask) {
+        try {
+          const detail = await generateAvaEventDetail({
+            activity: detailTask.daily.skeleton_activity!,
+            moodNote: detailTask.daily.skeleton_mood_note!,
+            prompt: detailTask.prompt
+          });
+          await completeAvaDailyEventDetail(detailTask, detail);
+        } catch (error) {
+          await releaseAvaDailyEventDetail(detailTask).catch(() => undefined);
+          console.warn("[ava:event-detail]", { message: error instanceof Error ? error.message : "event_detail_failed" });
         }
       }
 

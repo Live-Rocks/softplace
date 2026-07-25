@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import OpenAI, { APIConnectionTimeoutError } from "openai";
 import type { AiProvider, CompanionMode, Message } from "@softplace/shared";
 import { config } from "../config.js";
+import { buildAvaEventDetailInstructions, validateAvaEventDetail } from "../domain/avaEvents.js";
 
 const client = config.openAiApiKey
   ? new OpenAI({
@@ -145,6 +146,33 @@ export async function generateAvaReply(input: {
     const content = response.output_text?.trim();
     if (!content) throw new Error("empty_ava_response");
     return content;
+  } catch (error) {
+    if (error instanceof APIConnectionTimeoutError) throw new CompanionProviderTimeoutError(error);
+    throw new CompanionProviderError(error);
+  }
+}
+
+export async function generateAvaEventDetail(input: {
+  activity: string;
+  moodNote: string;
+  prompt: string;
+}) {
+  if (config.aiProvider === "local") {
+    return `今天慢慢處理${input.activity}，心裡還留著${input.moodNote}。`;
+  }
+  if (!client) throw new CompanionProviderError(new Error("OPENAI_API_KEY is not configured"));
+
+  try {
+    const response = await client.responses.create({
+      model: config.openAiLifeModel,
+      instructions: buildAvaEventDetailInstructions(),
+      input: [{ role: "user", content: input.prompt }],
+      store: config.openAiStoreResponses,
+      safety_identifier: hashUserId("ava-global-event")
+    } as any);
+    const detail = validateAvaEventDetail(response.output_text ?? "");
+    if (!detail) throw new Error("invalid_ava_event_detail");
+    return detail;
   } catch (error) {
     if (error instanceof APIConnectionTimeoutError) throw new CompanionProviderTimeoutError(error);
     throw new CompanionProviderError(error);

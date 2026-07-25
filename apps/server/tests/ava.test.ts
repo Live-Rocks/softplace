@@ -10,7 +10,15 @@ import {
   relationshipStage,
   shouldScheduleProactive
 } from "../src/domain/ava.js";
-import { getAvaEventPhase, listAvaEventDefinitions, selectNextAvaEvent } from "../src/domain/avaEvents.js";
+import {
+  buildAvaEventDetailInput,
+  buildAvaEventDetailInstructions,
+  eventBackgroundFallback,
+  getAvaEventPhase,
+  listAvaEventDefinitions,
+  selectNextAvaEvent,
+  validateAvaEventDetail
+} from "../src/domain/avaEvents.js";
 
 function taipeiTime(localDateTime: string) {
   return new Date(`${localDateTime}+08:00`);
@@ -117,6 +125,7 @@ test("Ava prompt discloses AI truthfully and includes shared life without claimi
     receivedActivity: "正在桌前改文案",
     currentActivity: "出門買晚餐",
     currentTone: "剛放下工作，語氣慢慢鬆下來",
+    eventBackground: "今天慢慢把一段文案收整到比較安靜的狀態。",
     memories: ["我喜歡清淡一點的菜"],
     proactive: false
   });
@@ -127,6 +136,8 @@ test("Ava prompt discloses AI truthfully and includes shared life without claimi
   assert.match(prompt, /最近一則訊息傳來時：正在桌前改文案/);
   assert.match(prompt, /目前：出門買晚餐/);
   assert.match(prompt, /不必每次主動報告行程/);
+  assert.match(prompt, /今日持續中的生活背景/);
+  assert.match(prompt, /不要重述、報進度/);
   assert.doesNotMatch(prompt, /startMinute|endMinute|delayMinutes/);
 });
 
@@ -150,4 +161,27 @@ test("Ava event selection is deterministic and avoids immediately repeating the 
   const again = selectNextAvaEvent({ startDate: "2026-07-25", previousEventKey: "copywriting-sprint" });
   assert.equal(first.key, again.key);
   assert.notEqual(first.key, "copywriting-sprint");
+});
+
+test("Ava event daily detail only uses its own phase and a same-run previous detail", () => {
+  const prompt = buildAvaEventDetailInput({
+    eventKey: "copywriting-sprint",
+    eventDay: 2,
+    phaseKey: "refine",
+    activity: "收整語氣和最後幾個段落",
+    moodNote: "慢慢有了收束感，不再那麼急",
+    previousDetail: "昨天先把零散的句子重新排過一次。"
+  });
+  assert.match(prompt, /第 2 天/);
+  assert.match(prompt, /昨天先把零散的句子/);
+  assert.match(buildAvaEventDetailInstructions(), /不得新增其他人物/);
+  assert.equal(eventBackgroundFallback({ activity: "整理桌面", moodNote: "步調很慢" }), "今天正在整理桌面，心情是步調很慢。");
+});
+
+test("Ava event daily detail rejects people, direct address, and invalid lengths", () => {
+  assert.equal(validateAvaEventDetail("今天把零散的句子慢慢排好，桌上的內容終於有了比較安靜的順序。"), "今天把零散的句子慢慢排好，桌上的內容終於有了比較安靜的順序。");
+  assert.equal(validateAvaEventDetail("今天和朋友一起整理內容，心裡比較不急。"), null);
+  assert.equal(validateAvaEventDetail("你今天可以陪我一起把內容整理好。"), null);
+  assert.equal(validateAvaEventDetail("今天先把內容重新排過一次。接著停下來看了看語氣。最後又改了幾句。"), null);
+  assert.equal(validateAvaEventDetail("太短。"), null);
 });

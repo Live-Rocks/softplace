@@ -110,7 +110,7 @@ sequenceDiagram
     S-->>M: 新訊息與 state
 ```
 
-Ava 生活以 `Asia/Taipei` 計算。分時作息仍由 server 程式決定；全域事件骨架則保存為 2～3 天的 `ava_event_runs` 與每日 phase，同一天對所有使用者相同。v0.3.4a 只建立與保存事件骨架，尚未餵入 OpenAI prompt。完整分時表留在 server；OpenAI 只收到「訊息傳來時」與「目前」的簡短情境。Worker 每次最多 claim 1 個 job，lease 與 RPC 避免同一 job 被重複完成。
+Ava 生活以 `Asia/Taipei` 計算。分時作息仍由 server 程式決定；全域事件保存為 2～3 天的 `ava_event_runs` 與每日 phase，同一天對所有使用者相同。Worker 每天為該 phase 生成一份全域事件細節，失敗時回退固定骨架；這份背景會低調注入回覆與主動訊息，但不讀取或保存任何使用者私訊。完整分時表留在 server；OpenAI 只收到「訊息傳來時」、「目前」與精簡事件背景。Worker 每次最多 claim 1 個 job，lease 與 RPC 避免同一 job 被重複完成。
 
 Server 已有 Expo push sender、push token API 與資料表，但 Mobile 尚未安裝並註冊 Android push token，因此目前由 Ava 頁面每 12 秒、App 其他分頁每 30 秒輪詢。
 

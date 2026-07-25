@@ -16,7 +16,7 @@ import {
   relationshipStage,
   shouldScheduleProactive
 } from "../domain/ava.js";
-import { getAvaEventPhase, selectNextAvaEvent } from "../domain/avaEvents.js";
+import { buildAvaEventDetailInput, getAvaEventPhase, selectNextAvaEvent } from "../domain/avaEvents.js";
 import { supabaseAdmin } from "./supabase.js";
 
 type AvaEventRunRow = {
@@ -25,6 +25,27 @@ type AvaEventRunRow = {
   starts_on: string;
   ends_on: string;
   duration_days: 2 | 3;
+};
+
+export type AvaDailyState = {
+  companion_key: string;
+  local_date: string;
+  activity: string;
+  mood_note: string;
+  event_run_id: string | null;
+  event_key: string | null;
+  event_day: number | null;
+  phase_key: string | null;
+  skeleton_activity: string | null;
+  skeleton_mood_note: string | null;
+  event_detail: string | null;
+  event_detail_status: "pending" | "leased" | "generated" | "failed";
+};
+
+export type AvaEventDetailTask = {
+  workerToken: string;
+  daily: AvaDailyState;
+  prompt: string;
 };
 
 type UserCompanionRow = {
@@ -106,7 +127,74 @@ export async function ensureAvaDailyState(now = new Date()) {
     .select("*")
     .single();
   if (error) throw error;
-  return data as { local_date: string; activity: string; mood_note: string };
+  return data as AvaDailyState;
+}
+
+export async function claimAvaDailyEventDetail(now = new Date()): Promise<AvaEventDetailTask | null> {
+  const daily = await ensureAvaDailyState(now);
+  const workerToken = crypto.randomUUID();
+  const { data, error } = await admin().rpc("claim_ava_event_detail", {
+    p_companion_key: AVA_KEY,
+    p_local_date: daily.local_date,
+    p_worker_token: workerToken,
+    p_lease_seconds: 120
+  });
+  if (error) throw error;
+  const claimed = (Array.isArray(data) ? data[0] : data) as AvaDailyState | null;
+  if (!claimed) return null;
+
+  let previousDetail: string | null = null;
+  if (claimed.event_run_id && claimed.event_day && claimed.event_day > 1) {
+    const previous = await admin()
+      .from("companion_daily_states")
+      .select("event_detail")
+      .eq("companion_key", AVA_KEY)
+      .eq("event_run_id", claimed.event_run_id)
+      .lt("local_date", claimed.local_date)
+      .eq("event_detail_status", "generated")
+      .not("event_detail", "is", null)
+      .order("local_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (previous.error) throw previous.error;
+    previousDetail = previous.data?.event_detail ?? null;
+  }
+
+  if (!claimed.event_key || !claimed.event_day || !claimed.phase_key || !claimed.skeleton_activity || !claimed.skeleton_mood_note) {
+    throw new Error("ava_event_detail_missing_skeleton");
+  }
+  return {
+    workerToken,
+    daily: claimed,
+    prompt: buildAvaEventDetailInput({
+      eventKey: claimed.event_key,
+      eventDay: claimed.event_day,
+      phaseKey: claimed.phase_key,
+      activity: claimed.skeleton_activity,
+      moodNote: claimed.skeleton_mood_note,
+      previousDetail
+    })
+  };
+}
+
+export async function completeAvaDailyEventDetail(task: AvaEventDetailTask, detail: string) {
+  const { data, error } = await admin().rpc("complete_ava_event_detail", {
+    p_companion_key: AVA_KEY,
+    p_local_date: task.daily.local_date,
+    p_worker_token: task.workerToken,
+    p_event_detail: detail
+  });
+  if (error) throw error;
+  if (!data) throw new Error("ava_event_detail_completion_lost_lease");
+}
+
+export async function releaseAvaDailyEventDetail(task: AvaEventDetailTask) {
+  const { error } = await admin().rpc("release_ava_event_detail", {
+    p_companion_key: AVA_KEY,
+    p_local_date: task.daily.local_date,
+    p_worker_token: task.workerToken
+  });
+  if (error) throw error;
 }
 
 async function ensureAvaEventRun(date: string): Promise<AvaEventRunRow> {

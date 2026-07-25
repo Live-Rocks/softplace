@@ -71,6 +71,43 @@ export function getAvaEventPhase(key: string, eventDay: number) {
   return phase;
 }
 
+export function eventBackgroundFallback(input: { activity: string; moodNote: string }) {
+  return `今天正在${input.activity}，心情是${input.moodNote}。`;
+}
+
+export function buildAvaEventDetailInstructions() {
+  return `你正在為 AI 虛擬朋友 Ava 寫一段私有、虛構的當日生活背景。這不是要直接傳給使用者的訊息。
+只用繁體中文寫 1～2 句，40～140 個字。只描述提供的事件 phase 與它自然延續出的內在進度。
+不得新增其他人物、朋友、家人、伴侶、同事、客戶、團隊、見面、約會、訊息往來、日期、地點或未定義事件，也不要提到使用者或直接對任何人說話。
+不要把內容寫成行程報告、日記、台詞或解釋；保持安靜、具體，讓它只作為之後對話的背景。`;
+}
+
+export function buildAvaEventDetailInput(input: {
+  eventKey: string;
+  eventDay: number;
+  phaseKey: string;
+  activity: string;
+  moodNote: string;
+  previousDetail?: string | null;
+}) {
+  return [
+    `事件：${input.eventKey}`,
+    `第 ${input.eventDay} 天，phase：${input.phaseKey}`,
+    `今天的骨架活動：${input.activity}`,
+    `今天的情緒底色：${input.moodNote}`,
+    input.previousDetail ? `同一事件昨天的背景：${input.previousDetail}` : "這是這條事件的第一天，沒有昨天背景。"
+  ].join("\n");
+}
+
+export function validateAvaEventDetail(value: string) {
+  const detail = value.replace(/\s+/g, " ").trim();
+  if (detail.length < 20 || detail.length > 180) return null;
+  const sentenceCount = detail.match(/[。！？!?]/g)?.length ?? 0;
+  if (sentenceCount < 1 || sentenceCount > 2) return null;
+  if (/(朋友|家人|伴侶|同事|客戶|團隊|主管|見面|碰面|約會|傳訊息|收到訊息|你|妳|使用者)/.test(detail)) return null;
+  return detail;
+}
+
 export function selectNextAvaEvent(input: { startDate: string; previousEventKey?: string | null }) {
   const seed = stableHash(`${input.startDate}:${input.previousEventKey ?? ""}`);
   const start = seed % eventDefinitions.length;

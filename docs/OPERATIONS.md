@@ -58,6 +58,7 @@
 6. `006_fix_deep_usage_ambiguity.sql`：修正完成深度交易的 SQL 欄位歧義。
 7. `007_ava_async_companion.sql`：Ava 關係、訊息、記憶、job、每日用量與 push token。
 8. `008_ava_global_event_foundation.sql`：Ava 全域 2～3 天事件 run 與每日 phase 骨架；尚未改變 prompt。
+9. `009_ava_event_daily_details.sql`：Ava 每日全域事件細節、原子 lease 與 30 分鐘失敗重試。
 
 已執行的 migration 不回頭改寫；修正以新編號追加。執行前先讀 SQL，執行後保存結果並跑對應 smoke test。
 
