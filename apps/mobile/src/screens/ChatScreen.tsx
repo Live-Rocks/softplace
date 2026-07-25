@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { Brain, Camera, Send, X } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +20,7 @@ import {
 import type { AiProvider, ChatRequest } from "@softplace/shared";
 import { api } from "../api/client";
 import { SoftButton } from "../components/SoftButton";
+import { useInitialScrollToLatest } from "../hooks/useInitialScrollToLatest";
 import { colors } from "../theme/theme";
 import type { LocalMessage, PendingMemory } from "../types";
 
@@ -27,6 +28,7 @@ const DEEP_MODE_KEY = "softplace.deepMode";
 
 type Props = {
   accessToken: string;
+  active: boolean;
   initialPrompt?: string;
   resetVersion: number;
   onInitialPromptConsumed: () => void;
@@ -34,6 +36,7 @@ type Props = {
 
 export function ChatScreen({
   accessToken,
+  active,
   initialPrompt,
   resetVersion,
   onInitialPromptConsumed
@@ -49,7 +52,19 @@ export function ChatScreen({
   const [sending, setSending] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const listRef = useRef<FlatList<LocalMessage>>(null);
+  const {
+    listRef,
+    onContentSizeChange,
+    onListLayout,
+    onLastItemLayout,
+    onScrollBeginDrag,
+    onScroll,
+    resetInitialScroll,
+  } = useInitialScrollToLatest<LocalMessage>({
+    active,
+    itemCount: messages.length,
+    resetKey: `${accessToken}:${resetVersion}`
+  });
 
   useEffect(() => {
     AsyncStorage.getItem(DEEP_MODE_KEY)
@@ -72,13 +87,13 @@ export function ChatScreen({
     api
       .conversationMessages(accessToken)
       .then((response) => {
+        resetInitialScroll();
         setMessages(response.messages);
         setNextCursor(response.nextCursor);
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50);
       })
       .catch((error) => setNotice(error instanceof Error ? error.message : "無法載入聊天內容。"))
       .finally(() => setLoadingHistory(false));
-  }, [accessToken, resetVersion]);
+  }, [accessToken, resetInitialScroll, resetVersion]);
 
   useEffect(() => {
     if (initialPrompt) {
@@ -218,8 +233,15 @@ export function ChatScreen({
         data={messages}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messages}
+        initialNumToRender={50}
+        maxToRenderPerBatch={50}
         keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         keyboardShouldPersistTaps="handled"
+        onContentSizeChange={onContentSizeChange}
+        onLayout={onListLayout}
+        onScrollBeginDrag={onScrollBeginDrag}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         ListHeaderComponent={
           nextCursor ? (
             <Pressable onPress={loadOlder} style={styles.olderButton} disabled={loadingOlder}>
@@ -238,8 +260,11 @@ export function ChatScreen({
             <Text style={styles.emptyState}>這裡還是空的。你可以慢慢開始。</Text>
           )
         }
-        renderItem={({ item }) => (
-          <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.assistantBubble]}>
+        renderItem={({ item, index }) => (
+          <View
+            style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.assistantBubble]}
+            onLayout={index === messages.length - 1 ? onLastItemLayout : undefined}
+          >
             {item.imagePresent ? <Text style={styles.imageFlag}>已附上一張圖片</Text> : null}
             <Text style={[styles.messageText, item.role === "user" && styles.userText]}>{item.content}</Text>
           </View>

@@ -1,5 +1,5 @@
 import { Send } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -14,6 +14,7 @@ import {
 import type { AvaMessage, AvaState } from "@softplace/shared";
 import { api } from "../api/client";
 import { SoftButton } from "../components/SoftButton";
+import { useInitialScrollToLatest } from "../hooks/useInitialScrollToLatest";
 import { colors } from "../theme/theme";
 import { splitAvaBubbleSegments } from "../utils/avaBubbleSegments";
 
@@ -30,7 +31,18 @@ export function AvaScreen({ accessToken, active, onUnreadCountChange }: Props) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState("");
-  const listRef = useRef<FlatList<AvaMessage>>(null);
+  const {
+    listRef,
+    onContentSizeChange,
+    onListLayout,
+    onLastItemLayout,
+    onScrollBeginDrag,
+    onScroll
+  } = useInitialScrollToLatest<AvaMessage>({
+    active,
+    itemCount: messages.length,
+    resetKey: accessToken
+  });
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -46,7 +58,6 @@ export function AvaScreen({ accessToken, active, onUnreadCountChange }: Props) {
         setState(response.state);
         onUnreadCountChange(response.state.unreadCount);
       }
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: !quiet }), 40);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "暫時無法載入 Ava。");
     } finally {
@@ -112,8 +123,15 @@ export function AvaScreen({ accessToken, active, onUnreadCountChange }: Props) {
         data={messages}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messages}
+        initialNumToRender={50}
+        maxToRenderPerBatch={50}
         keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         keyboardShouldPersistTaps="handled"
+        onContentSizeChange={onContentSizeChange}
+        onLayout={onListLayout}
+        onScrollBeginDrag={onScrollBeginDrag}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         ListEmptyComponent={
           loading ? <ActivityIndicator color={colors.accent} style={styles.empty} /> : (
             <View style={styles.empty}>
@@ -122,10 +140,12 @@ export function AvaScreen({ accessToken, active, onUnreadCountChange }: Props) {
             </View>
           )
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
+          const isLast = index === messages.length - 1;
+
           if (item.role === "user") {
             return (
-              <View style={[styles.bubble, styles.userBubble]}>
+              <View style={[styles.bubble, styles.userBubble]} onLayout={isLast ? onLastItemLayout : undefined}>
                 <Text style={[styles.messageText, styles.userText]}>{item.content}</Text>
               </View>
             );
@@ -133,7 +153,7 @@ export function AvaScreen({ accessToken, active, onUnreadCountChange }: Props) {
 
           const segments = splitAvaBubbleSegments(item.content);
           return (
-            <View style={styles.avaBubbleGroup}>
+            <View style={styles.avaBubbleGroup} onLayout={isLast ? onLastItemLayout : undefined}>
               {segments.map((segment, index) => (
                 <View key={`${item.id}-${index}`} style={[styles.bubble, styles.avaBubble]}>
                   {item.proactive && index === 0 ? <Text style={styles.proactive}>Ava 主動傳來</Text> : null}

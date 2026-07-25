@@ -54,7 +54,7 @@ export function AvaSettings({ accessToken }: { accessToken: string }) {
             />
           ))}
         </View>
-        <Text style={styles.muted}>安靜時間：23:00–09:00</Text>
+        <Text style={styles.muted}>Ava 的休息時間：00:00–08:00</Text>
       </View>
 
       <View style={styles.group}>

@@ -138,6 +138,7 @@ function AppContent() {
         <View style={[styles.screen, tab !== "chat" && styles.hidden]}>
           <ChatScreen
             accessToken={token}
+            active={tab === "chat"}
             initialPrompt={initialPrompt}
             resetVersion={chatResetVersion}
             onInitialPromptConsumed={() => setInitialPrompt(undefined)}
