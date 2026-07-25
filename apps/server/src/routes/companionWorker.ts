@@ -9,6 +9,7 @@ import {
   newWorkerToken,
   retryAvaJob,
   saveAvaMemoryIfNew,
+  ensureAvaDailyState,
   scheduleEligibleProactiveJobs
 } from "../integrations/avaRepository.js";
 import { sendAvaPush } from "../integrations/expoPush.js";
@@ -24,6 +25,7 @@ export function companionWorkerRouter() {
       }
       if (!config.avaFeatureEnabled) return res.json({ scheduled: 0, claimed: 0, completed: 0 });
 
+      await ensureAvaDailyState();
       const scheduled = await scheduleEligibleProactiveJobs();
       const workerToken = newWorkerToken();
       const jobs = await claimAvaJobs(workerToken);

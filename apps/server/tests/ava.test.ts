@@ -10,6 +10,7 @@ import {
   relationshipStage,
   shouldScheduleProactive
 } from "../src/domain/ava.js";
+import { getAvaEventPhase, listAvaEventDefinitions, selectNextAvaEvent } from "../src/domain/avaEvents.js";
 
 function taipeiTime(localDateTime: string) {
   return new Date(`${localDateTime}+08:00`);
@@ -127,4 +128,26 @@ test("Ava prompt discloses AI truthfully and includes shared life without claimi
   assert.match(prompt, /目前：出門買晚餐/);
   assert.match(prompt, /不必每次主動報告行程/);
   assert.doesNotMatch(prompt, /startMinute|endMinute|delayMinutes/);
+});
+
+test("Ava global event definitions have aligned 2-to-3-day phases without other people", () => {
+  const events = listAvaEventDefinitions();
+  assert.ok(events.length >= 2);
+  for (const event of events) {
+    assert.ok(event.durationDays === 2 || event.durationDays === 3, event.key);
+    assert.equal(event.phases.length, event.durationDays, event.key);
+    assert.equal(getAvaEventPhase(event.key, event.durationDays).key, event.phases.at(-1)?.key);
+    assert.doesNotMatch(
+      event.phases.map((phase) => `${phase.activity} ${phase.moodNote}`).join(" "),
+      /(朋友|家人|伴侶|同事|團隊|客戶|老師|醫生)/,
+      event.key
+    );
+  }
+});
+
+test("Ava event selection is deterministic and avoids immediately repeating the previous run", () => {
+  const first = selectNextAvaEvent({ startDate: "2026-07-25", previousEventKey: "copywriting-sprint" });
+  const again = selectNextAvaEvent({ startDate: "2026-07-25", previousEventKey: "copywriting-sprint" });
+  assert.equal(first.key, again.key);
+  assert.notEqual(first.key, "copywriting-sprint");
 });

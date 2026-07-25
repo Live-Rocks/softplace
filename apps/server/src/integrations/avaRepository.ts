@@ -16,7 +16,16 @@ import {
   relationshipStage,
   shouldScheduleProactive
 } from "../domain/ava.js";
+import { getAvaEventPhase, selectNextAvaEvent } from "../domain/avaEvents.js";
 import { supabaseAdmin } from "./supabase.js";
+
+type AvaEventRunRow = {
+  id: string;
+  event_key: string;
+  starts_on: string;
+  ends_on: string;
+  duration_days: 2 | 3;
+};
 
 type UserCompanionRow = {
   user_id: string;
@@ -72,16 +81,60 @@ export async function ensureAvaUser(userId: string) {
 export async function ensureAvaDailyState(now = new Date()) {
   const date = localDate(now);
   const life = dailyLifeForDate(date);
+  const eventRun = await ensureAvaEventRun(date);
+  const eventDay = daysBetween(eventRun.starts_on, date) + 1;
+  const phase = getAvaEventPhase(eventRun.event_key, eventDay);
   const { data, error } = await admin()
     .from("companion_daily_states")
     .upsert(
-      { companion_key: AVA_KEY, local_date: date, timezone: "Asia/Taipei", activity: life.activity, mood_note: life.moodNote },
+      {
+        companion_key: AVA_KEY,
+        local_date: date,
+        timezone: "Asia/Taipei",
+        // Keep the existing daily-life background untouched until v0.3.4b.
+        activity: life.activity,
+        mood_note: life.moodNote,
+        event_run_id: eventRun.id,
+        event_key: eventRun.event_key,
+        event_day: eventDay,
+        phase_key: phase.key,
+        skeleton_activity: phase.activity,
+        skeleton_mood_note: phase.moodNote
+      },
       { onConflict: "companion_key,local_date" }
     )
     .select("*")
     .single();
   if (error) throw error;
   return data as { local_date: string; activity: string; mood_note: string };
+}
+
+async function ensureAvaEventRun(date: string): Promise<AvaEventRunRow> {
+  const previous = await admin()
+    .from("ava_event_runs")
+    .select("event_key, ends_on")
+    .eq("companion_key", AVA_KEY)
+    .lt("ends_on", date)
+    .order("ends_on", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (previous.error) throw previous.error;
+
+  const event = selectNextAvaEvent({ startDate: date, previousEventKey: previous.data?.event_key });
+  const { data, error } = await admin().rpc("ensure_ava_event_run", {
+    p_companion_key: AVA_KEY,
+    p_local_date: date,
+    p_event_key: event.key,
+    p_duration_days: event.durationDays
+  });
+  if (error) throw error;
+  const run = Array.isArray(data) ? data[0] : data;
+  if (!run) throw new Error("ava_event_run_not_created");
+  return run as AvaEventRunRow;
+}
+
+function daysBetween(startDate: string, endDate: string) {
+  return Math.round((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000);
 }
 
 export async function getAvaState(userId: string): Promise<AvaState> {

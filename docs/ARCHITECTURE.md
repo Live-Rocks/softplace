@@ -110,7 +110,7 @@ sequenceDiagram
     S-->>M: 新訊息與 state
 ```
 
-Ava 生活以 `Asia/Taipei` 計算，同一日期對所有使用者選到相同生活日。完整分時表留在 server；OpenAI 只收到「訊息傳來時」與「目前」的簡短情境。Worker 每次最多 claim 1 個 job，lease 與 RPC 避免同一 job 被重複完成。
+Ava 生活以 `Asia/Taipei` 計算。分時作息仍由 server 程式決定；全域事件骨架則保存為 2～3 天的 `ava_event_runs` 與每日 phase，同一天對所有使用者相同。v0.3.4a 只建立與保存事件骨架，尚未餵入 OpenAI prompt。完整分時表留在 server；OpenAI 只收到「訊息傳來時」與「目前」的簡短情境。Worker 每次最多 claim 1 個 job，lease 與 RPC 避免同一 job 被重複完成。
 
 Server 已有 Expo push sender、push token API 與資料表，但 Mobile 尚未安裝並註冊 Android push token，因此目前由 Ava 頁面每 12 秒、App 其他分頁每 30 秒輪詢。
 
@@ -143,7 +143,7 @@ Server 已有 Expo push sender、push token API 與資料表，但 Mobile 尚未
 
 成本保護：`chat_rate_limit_windows`、`deep_usage_reservations`。
 
-Ava：`companion_definitions`、`companion_daily_states`、`user_companions`、`companion_messages`、`companion_memories`、`companion_jobs`、`companion_daily_usage`、`push_tokens`。
+Ava：`companion_definitions`、`ava_event_runs`、`companion_daily_states`、`user_companions`、`companion_messages`、`companion_memories`、`companion_jobs`、`companion_daily_usage`、`push_tokens`。
 
 一般使用者可透過 RLS 讀取自己的核心資料；實際 App 寫入主要由 server 使用 service-role 完成。成本保護與 Ava 資料表不開放 anon／authenticated 直接存取，只允許 service-role 與受控 RPC。
 
