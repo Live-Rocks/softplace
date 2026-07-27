@@ -155,7 +155,20 @@ Supabase 啟用 Cron、`pg_net` 與 Vault。Cron job：
 
 Expo Go 是開發容器，需從 Metro 下載 bundle；LAN 模式通常要求同一 Wi-Fi。Zeabur API 上線不會改變這件事。
 
-`apps/mobile/eas.json` 已有 `development` 與 `preview` APK profile，但 Android push 尚未完成。未來 Preview APK 需安裝通知套件、建立 EAS project、設定 Firebase FCM V1、註冊 Expo push token並處理通知點擊導向 Ava。完成後才可在沒有 Metro／同網路的情況下獨立使用並接收遠端通知。
+Expo SDK 53 起，Android 的遠端 push 無法用 Expo Go 測試；SDK 54 的 SoftPlace 必須使用 development build 或 Preview APK。`apps/mobile/eas.json` 的 `preview` profile 會產出可直接安裝、無需 Metro 的 APK，並明確使用 EAS `preview` environment。
+
+Mobile 已安裝 `expo-notifications`／`expo-constants`，登入後會建立 `ava-messages` Android channel、請求通知權限、取得 EAS project 對應的 Expo Push Token、呼叫 `/api/push-tokens` 註冊；點擊 `data.tab = "ava"` 的通知會開啟 Ava 分頁。設定頁的「Ava 推播」區塊會顯示註冊狀態與錯誤，並可手動重新檢查。
+
+第一次建立 Android push：
+
+1. EAS project 已連結為 `@aa5961311/softplace`；`app.json` 的 `extra.eas.projectId` 是 `92a8ce52-f523-4f5a-b259-126f0ed49369`。若更換 Expo 帳號或專案，才重新執行 `npx eas-cli login` 與 `npx eas-cli project:init`。
+2. Firebase project 已建立為 `SoftPlace`（project ID `softplace-f9042`），Gemini 與 Google Analytics 關閉；Android app 已註冊為 `SoftPlace Android`，package 是 `online.softplace.app`。`google-services.json` 已放在 `apps/mobile/`，並在 `app.json` 的 `expo.android.googleServicesFile` 指向 `./google-services.json`。
+3. Google Cloud／Firebase 的 FCM V1 service account JSON 已上傳並綁定 SoftPlace EAS project 的 `online.softplace.app`。這份本機檔案是秘密，不得放入 Git；若重新產生，仍須用 `npx eas-cli credentials --platform android` 更新 EAS credential。
+4. EAS `preview` environment 已建立 `EXPO_PUBLIC_API_BASE_URL`、`EXPO_PUBLIC_SUPABASE_URL`、`EXPO_PUBLIC_SUPABASE_ANON_KEY`。這三項會進入 APK，屬公開 Mobile 設定，不得誤放 service-role 或 OpenAI key。
+5. 執行 `npx eas-cli build --platform android --profile preview`，完成後從 EAS build 頁面的 install URL 在 Android 實機安裝 APK。2026-07-27 的首個成功 build 是 `81f8db28-51aa-4a0d-acfa-8f81bfc629f6`；本機副本為 `artifacts/softplace-preview-0.3.0.apk`（此目錄已由 Git 忽略）。
+6. 登入並允許通知。先用 Expo Push Notifications Tool 對新 token 做單則測試，再傳一則 Ava 訊息，等 Cron／Worker 完成後確認背景與關閉 App 狀態都能收到通知，點擊後進入 Ava。2026-07-27 首次 Android 實機驗收成功：設定顯示「Ava 推播：已註冊」，並收到包含 Ava 完整內文的第一則遠端推播。
+
+檢查資料與故障順序：`push_tokens` 是否有該帳號 enabled token → Worker log 是否出現 `[ava:push]` → Expo push ticket／receipt → EAS FCM V1 credential → Android App 通知權限與省電限制。目前 sender 已檢查 Expo HTTP 與逐 token push ticket；延遲 receipt 查詢與收到 `DeviceNotRegistered` 後自動停用 token 仍需補強。
 
 ## Smoke Test
 

@@ -1,4 +1,5 @@
 import type { Session } from "@supabase/supabase-js";
+import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, AppState, Keyboard, StatusBar, StyleSheet, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -9,6 +10,11 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { AvaScreen } from "./screens/AvaScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
+import {
+  isAvaNotificationResponse,
+  registerForAvaPushNotifications,
+  type PushRegistrationState
+} from "./integrations/notifications";
 import { supabase } from "./integrations/supabase";
 import { colors } from "./theme/theme";
 import type { AppTab } from "./types";
@@ -29,6 +35,10 @@ function AppContent() {
   const [chatResetVersion, setChatResetVersion] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [avaUnreadCount, setAvaUnreadCount] = useState(0);
+  const [pushRegistration, setPushRegistration] = useState<PushRegistrationState>({
+    status: "idle",
+    message: "尚未檢查這台裝置的通知狀態。"
+  });
 
   useEffect(() => {
     if (!supabase) {
@@ -83,6 +93,51 @@ function AppContent() {
       subscription.remove();
     };
   }, [session?.access_token, tab]);
+
+  const registerPush = useCallback(async () => {
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      setPushRegistration({
+        status: "idle",
+        message: "登入後才會註冊 Ava 推播。"
+      });
+      return;
+    }
+
+    setPushRegistration({
+      status: "registering",
+      message: "正在檢查通知權限與裝置 token…"
+    });
+
+    try {
+      setPushRegistration(await registerForAvaPushNotifications(accessToken));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "push_registration_failed";
+      console.warn("[softplace:push-registration]", {
+        message
+      });
+      setPushRegistration({
+        status: "error",
+        message: `推播註冊失敗：${message}`
+      });
+    }
+  }, [session?.access_token]);
+
+  useEffect(() => {
+    void registerPush();
+  }, [registerPush]);
+
+  useEffect(() => {
+    const openAva = (response: Notifications.NotificationResponse | null) => {
+      if (!isAvaNotificationResponse(response)) return;
+      setTab("ava");
+      Notifications.clearLastNotificationResponse();
+    };
+
+    openAva(Notifications.getLastNotificationResponse());
+    const subscription = Notifications.addNotificationResponseReceivedListener(openAva);
+    return () => subscription.remove();
+  }, []);
 
   const changeTab = useCallback((nextTab: AppTab) => {
     if (nextTab === "ava") setAvaUnreadCount(0);
@@ -155,6 +210,8 @@ function AppContent() {
           <SettingsScreen
             accessToken={token}
             email={session.user.email ?? ""}
+            pushRegistration={pushRegistration}
+            onRetryPushRegistration={registerPush}
             onConversationCleared={() => setChatResetVersion((value) => value + 1)}
           />
         </View>

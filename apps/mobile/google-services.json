@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "546010769538",
+    "project_id": "softplace-f9042",
+    "storage_bucket": "softplace-f9042.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:546010769538:android:0d2c5636364a04fb496c9b",
+        "android_client_info": {
+          "package_name": "online.softplace.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCe1zK7ruJuaTfvmFQiS_7DpyNzNIAuvw8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

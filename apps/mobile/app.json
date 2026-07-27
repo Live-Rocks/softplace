@@ -6,12 +6,24 @@
     "orientation": "portrait",
     "scheme": "softplace",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#8C6A5D",
+          "defaultChannel": "ava-messages"
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "online.softplace.app",
+      "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#F7F1EA"
@@ -19,6 +31,12 @@
     },
     "web": {
       "bundler": "metro"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "92a8ce52-f523-4f5a-b259-126f0ed49369"
+      }
+    },
+    "owner": "aa5961311"
   }
 }

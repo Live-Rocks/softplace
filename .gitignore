@@ -4,6 +4,10 @@ node_modules/
 .env.local
 dist/
 coverage/
+artifacts/
 *.log
 .DS_Store
 
+# Firebase Admin SDK service-account keys are secrets.
+*-firebase-adminsdk-*.json
+firebase-service-account*.json

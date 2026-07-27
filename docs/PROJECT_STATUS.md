@@ -1,8 +1,8 @@
 # SoftPlace 專案狀態
 
-最後核對：`2026-07-22`
+最後核對：`2026-07-27`
 
-基準 commit：`634d268`
+基準 commit：`b008f60`
 
 目前階段：本人使用／少量封測前的 staging
 
@@ -12,7 +12,7 @@
 
 | 名稱 | 目前值 | 說明 |
 | --- | --- | --- |
-| Feature milestone | `v0.3.3` | 產品／功能溝通版本 |
+| Feature milestone | `v0.3.4` | Ava 全域事件與每日細節已進入 staging |
 | Expo manifest | `0.3.0` | `apps/mobile/app.json` |
 | Legacy npm package | `0.2.0` | 歷史 workspace package metadata |
 
@@ -32,7 +32,7 @@
 - **使用者實機確認**：Supabase Passwordless Email OTP 註冊、登入、重寄與 session。
 - **使用者實機確認**：Zeabur staging API 可從手機連線，公開健康端點為 `https://softplace.zeabur.app/health`。
 - **程式已驗證**：Node 24／npm 11 monorepo build scripts 與 Zeabur Git push 自動部署骨架。
-- **使用者實機確認**：migration `001～009` 已套用；既有聊天、記憶與用量在 server 重啟後保留。
+- **使用者實機確認**：migration `001～010` 已套用；既有聊天、記憶與用量在 server 重啟後保留。
 - **使用者實機確認**：Resend domain、Supabase custom SMTP 與六位數 OTP Email。
 
 ### 安放
@@ -44,7 +44,7 @@
 - **程式已驗證**：最近 20 則上下文、確認記憶、圖片不落庫、provider 標示。
 - **程式已驗證**：每分鐘／每小時限流、深度 reservation、成功才扣額度、timeout 與失敗釋放。
 - **程式已驗證**：危機語句在一般限流與 OpenAI 前攔截，回覆台灣真人資源。
-- **程式已驗證**：新安放訊息由對話內流水號排序；避免 user／assistant 同時間戳在重開 App 後倒置。migration `010` 尚待 staging 套用。
+- **已實作待驗證**：新安放訊息由對話內流水號排序，避免 user／assistant 同時間戳在重開 App 後倒置。migration `010` 已部署；既有歷史不回填，清除後的新時間線仍待實機重開 App 驗收。
 
 ### Ava beta
 
@@ -53,13 +53,13 @@
 - **程式已驗證**：台北分時生活、週間／週末生活日、睡眠後回覆、近期聊天快速回覆。
 - **程式已驗證**：主動訊息的安靜時間、可用狀態、未讀與 pending job 限制。
 - **程式已驗證**：Ava 關係階段、低敏感記憶、每日生成額度與資料刪除。
-- **已實作待驗證**：Ava 全域事件保存為 2～3 天的 run 與每日 phase；每天生成一份全域細節後低調注入回覆，需在 staging 套用 `009` 後確認跨日流程。
+- **使用者實機確認**：Ava 全域事件保存為 2～3 天的 run 與每日 phase；每日細節已在 staging 成功生成，並低調注入回覆背景。
+- **已實作待驗證**：同一 event run 的跨日承接、長時間主動訊息頻率與內容品質仍需持續實測。
 - **程式已驗證**：Ava assistant 回覆依句子顯示為最多 3 個泡泡，資料庫仍保存完整原文。
-- **已實作待驗證**：主動訊息在長時間真實使用下的頻率、內容品質與跨日表現。
+- **使用者實機確認**：首個 Preview APK（EAS build `81f8db28-51aa-4a0d-acfa-8f81bfc629f6`）已在 Android 安裝；設定頁顯示「Ava 推播：已註冊」，並成功收到第一則包含 Ava 完整內文的遠端推播。Mobile 通知權限、Expo Push Token 註冊、Server sender、EAS FCM V1 與 Firebase Android app 的端到端鏈路已驗收。
 
 ## 已知限制
 
-- **未完成**：Android 遠端 push。Server sender、API 與資料表存在，但 Mobile 尚未安裝通知套件、註冊 token、設定 FCM V1 並產出 Preview APK。
 - **未完成**：Expo Go 仍依賴 Metro；使用 LAN 模式時手機與 Mac 需在相同網路。Zeabur 只讓 API 離開本機，沒有把 Expo bundle 變成獨立 App。
 - **已實作待驗證**：部分 Android 裝置的鍵盤／輸入列仍可能有少量偏移，目前採 Expo Go 相容的避讓方式。
 - **已知架構限制**：Ava 主動訊息目前不帶最近真實對話，只使用主動訊息指令與當日生活背景，容易顯得脫離脈絡。
@@ -73,7 +73,7 @@
 1. 長時間實測 Ava 延遲回覆、主動訊息、未讀與跨日生活脈絡。
 2. 修正 leased reply job 補傳訊息競態，定義 Worker context snapshot 邊界。
 3. 讓 Ava 主動訊息安全地帶入有限近期脈絡，避免突然脫離對話。
-4. 建立 Preview APK 與 Android push，移除 Metro／同網路依賴。
+4. 持續觀察 Preview APK 的 Android push 到達率、點擊導頁與不同廠牌省電限制。
 5. 在少量封測前補齊監控、錯誤可讀性、資料刪除與隱私說明。
 
 ## 延後項目

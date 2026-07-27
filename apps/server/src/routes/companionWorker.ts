@@ -73,9 +73,13 @@ export function companionWorkerRouter() {
           }
 
           const tokens = await getPushTokens(job.user_id).catch(() => []);
-          await sendAvaPush(tokens, content).catch((error) => {
-            console.warn("[ava:push]", { message: error instanceof Error ? error.message : "push_failed" });
-          });
+          await sendAvaPush(tokens, content)
+            .then((result) => {
+              if (result.accepted > 0) console.info("[ava:push]", { accepted: result.accepted });
+            })
+            .catch((error) => {
+              console.warn("[ava:push]", { message: error instanceof Error ? error.message : "push_failed" });
+            });
         } catch (error) {
           await retryAvaJob(job.id, workerToken, error instanceof Error ? error.message : "worker_failed");
         }

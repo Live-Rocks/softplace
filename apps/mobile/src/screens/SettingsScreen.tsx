@@ -7,15 +7,24 @@ import { SoftButton } from "../components/SoftButton";
 import { AvaSettings } from "../components/AvaSettings";
 import { MemoriesScreen } from "./MemoriesScreen";
 import { supabase } from "../integrations/supabase";
+import type { PushRegistrationState } from "../integrations/notifications";
 import { colors } from "../theme/theme";
 
 type Props = {
   accessToken: string;
   email: string;
+  pushRegistration: PushRegistrationState;
+  onRetryPushRegistration: () => Promise<void>;
   onConversationCleared: () => void;
 };
 
-export function SettingsScreen({ accessToken, email, onConversationCleared }: Props) {
+export function SettingsScreen({
+  accessToken,
+  email,
+  pushRegistration,
+  onRetryPushRegistration,
+  onConversationCleared
+}: Props) {
   const [usage, setUsage] = useState<UsageState | null>(null);
   const [provider, setProvider] = useState<AiProvider | null>(null);
   const [models, setModels] = useState<{ deep: string; light: string } | null>(null);
@@ -71,6 +80,26 @@ export function SettingsScreen({ accessToken, email, onConversationCleared }: Pr
           <Text style={styles.usageItem}>來源：{provider === "openai" ? "OpenAI API" : "本機測試回覆"}</Text>
           <Text style={styles.muted}>輕量：{models?.light ?? "尚未載入"}</Text>
           <Text style={styles.muted}>深度：{models?.deep ?? "尚未載入"}</Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Ava 推播</Text>
+          <SoftButton
+            label="重新檢查"
+            icon={RefreshCw}
+            tone="quiet"
+            disabled={pushRegistration.status === "registering"}
+            loading={pushRegistration.status === "registering"}
+            onPress={onRetryPushRegistration}
+          />
+        </View>
+        <View style={styles.usageGrid}>
+          <Text style={styles.usageItem}>
+            狀態：{pushRegistrationLabel(pushRegistration.status)}
+          </Text>
+          <Text style={styles.muted}>{pushRegistration.message}</Text>
         </View>
       </View>
 
@@ -162,3 +191,20 @@ const styles = StyleSheet.create({
     lineHeight: 22
   }
 });
+
+function pushRegistrationLabel(status: PushRegistrationState["status"]) {
+  switch (status) {
+    case "registered":
+      return "已註冊";
+    case "registering":
+      return "檢查中";
+    case "denied":
+      return "權限未開啟";
+    case "unsupported":
+      return "此平台不支援";
+    case "error":
+      return "註冊失敗";
+    default:
+      return "尚未檢查";
+  }
+}
