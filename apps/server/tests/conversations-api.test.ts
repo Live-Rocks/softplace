@@ -43,10 +43,14 @@ test("conversation history paginates without gaps and clearing starts a new time
       const response = await fetch(`${baseUrl}/current/messages${query}`);
       assert.equal(response.status, 200);
       const body = (await response.json()) as {
-        messages: Array<{ id: string }>;
+        messages: Array<{ id: string; sequence: number }>;
         nextCursor: string | null;
       };
       pageSizes.push(body.messages.length);
+      assert.deepEqual(
+        body.messages.map((message) => message.sequence),
+        [...body.messages.map((message) => message.sequence)].sort((a, b) => a - b)
+      );
       body.messages.forEach((message) => allIds.add(message.id));
       cursor = body.nextCursor;
     } while (cursor);

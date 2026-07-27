@@ -19,7 +19,7 @@ SoftPlace 是一個私密的 18+ AI 情緒陪伴 App。核心角色「安放」�
 apps/mobile/               Expo App
 apps/server/               Express API、OpenAI 與 Worker
 packages/shared/           Mobile／Server 共用型別
-supabase/migrations/       001～007 資料庫 migration
+supabase/migrations/       001～010 資料庫 migration
 docs/                      產品、架構、狀態、維運與決策文件
 zbpack.json                Zeabur build／start 設定
 ```
@@ -29,21 +29,21 @@ zbpack.json                Zeabur build／start 設定
 需求：Node.js `24.x`、npm `11.x`。
 
 ```bash
-cd "/Users/a1/Documents/Codex/2026-06-27/ji3"
+cd "/Users/a1/Downloads/2026/softplace"
 nvm use system
 npm ci
 cp apps/server/.env.example apps/server/.env
 cp apps/mobile/.env.example apps/mobile/.env
 ```
 
-在 Supabase SQL Editor 依序執行 `supabase/migrations/001_*.sql` 到 `007_*.sql`。把實際 credential 填入兩份 `.env`；OpenAI key 與 Supabase service-role key 只能放在 server，不能放進 mobile。
+在 Supabase SQL Editor 依序執行 `supabase/migrations/001_*.sql` 到 `010_*.sql`。把實際 credential 填入兩份 `.env`；OpenAI key 與 Supabase service-role key 只能放在 server，不能放進 mobile。
 
 ## 啟動
 
 Server：
 
 ```bash
-cd "/Users/a1/Documents/Codex/2026-06-27/ji3"
+cd "/Users/a1/Downloads/2026/softplace"
 nvm use system
 npm run dev:server
 ```
@@ -51,7 +51,7 @@ npm run dev:server
 Mobile／Expo Go：
 
 ```bash
-cd "/Users/a1/Documents/Codex/2026-06-27/ji3/apps/mobile"
+cd "/Users/a1/Downloads/2026/softplace/apps/mobile"
 nvm use system
 npm run start -- --host lan --clear
 ```

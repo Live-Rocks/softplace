@@ -96,6 +96,10 @@ test("chat sends only the previous 20 messages and charges successful deep repli
       assert.equal(body.provider, "openai");
       assert.equal(body.usage.deepMessagesUsed, 1);
       assert.equal(captured?.history.length, 20);
+      assert.deepEqual(
+        captured?.history.map((message) => message.sequence),
+        [...(captured?.history.map((message) => message.sequence) ?? [])].sort((a, b) => a - b)
+      );
       assert.equal(captured?.history.some((message) => message.content === "剛剛那件事"), false);
       assert.equal(captured?.mode, "deep");
       assert.equal(captured?.model, config.openAiDeepModel);
@@ -367,6 +371,12 @@ test("crisis responses bypass the ordinary chat rate limit", async () => {
       assert.equal(body.crisisDetected, true);
       assert.equal(body.provider, "local");
       assert.equal(generatorCalls, 0);
+      const conversation = await repository.getOrCreatePrimaryConversation(testUser.id);
+      const messages = await repository.listMessages(testUser.id, conversation.id, { limit: 10 });
+      assert.equal(messages.length, 2);
+      assert.equal(messages[0]?.role, "user");
+      assert.equal(messages[1]?.role, "assistant");
+      assert.ok((messages[0]?.sequence ?? 0) < (messages[1]?.sequence ?? 0));
     }
   );
 });
@@ -400,6 +410,9 @@ test("finalizing the same reservation twice never charges twice", async () => {
   await repository.completeChatSuccess(testUser.id, testUser.plan, input);
   await assert.rejects(repository.completeChatSuccess(testUser.id, testUser.plan, input), /reservation_not_active/);
   assert.equal((await repository.getUsage(testUser.id, testUser.plan)).deepMessagesUsed, 1);
+  const messages = await repository.listMessages(testUser.id, conversation.id, { limit: 10 });
+  assert.deepEqual(messages.map((message) => message.role), ["user", "assistant"]);
+  assert.ok((messages[0]?.sequence ?? 0) < (messages[1]?.sequence ?? 0));
 });
 
 test("hourly rate limits are isolated by user", async () => {

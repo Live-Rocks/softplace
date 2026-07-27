@@ -19,6 +19,7 @@ export type Conversation = {
 export type Message = {
   id: string;
   conversationId: string;
+  sequence: number;
   role: MessageRole;
   content: string;
   modelUsed?: string | null;

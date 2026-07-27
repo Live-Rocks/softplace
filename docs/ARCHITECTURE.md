@@ -60,10 +60,10 @@ sequenceDiagram
         opt 需要深度額度
             S->>DB: reserve_deep_usage
         end
-        S->>DB: 最近 20 則訊息＋已確認記憶
+        S->>DB: 依對話流水號讀最近 20 則＋已確認記憶
         S->>O: instructions、history、user input、可選圖片
         O-->>S: assistant output
-        S->>DB: complete_chat_success 原子保存與扣款
+        S->>DB: complete_chat_success 原子保存、分配訊息順序與扣款
         S-->>M: ChatResponse
     end
 ```

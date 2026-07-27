@@ -92,16 +92,23 @@ export function createMemoryRepository(initialProfiles: AuthUser[] = []): Reposi
         .filter(
           (message) =>
             !options.before ||
-            message.createdAt < options.before.createdAt ||
-            (message.createdAt === options.before.createdAt && message.id < options.before.id)
+            message.sequence < options.before.sequence ||
+            (message.sequence === options.before.sequence &&
+              (message.createdAt < options.before.createdAt ||
+                (message.createdAt === options.before.createdAt && message.id < options.before.id)))
         )
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+        .sort(
+          (a, b) =>
+            a.sequence - b.sequence || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+        )
         .slice(-limit);
     },
     async createMessage(input) {
+      const sequence = nextMessageSequence(messages, input.conversationId);
       const message: Message = {
         id: id(),
         conversationId: input.conversationId,
+        sequence,
         role: input.role,
         content: input.content,
         modelUsed: input.modelUsed ?? null,
@@ -226,9 +233,11 @@ export function createMemoryRepository(initialProfiles: AuthUser[] = []): Reposi
         throw new Error("light_mode_cannot_use_reservation");
       }
 
+      const userSequence = nextMessageSequence(messages, input.conversationId);
       const userMessage: Message = {
         id: id(),
         conversationId: input.conversationId,
+        sequence: userSequence,
         role: "user",
         content: input.userContent,
         modelUsed: null,
@@ -240,6 +249,7 @@ export function createMemoryRepository(initialProfiles: AuthUser[] = []): Reposi
       const assistantMessage: Message = {
         id: id(),
         conversationId: input.conversationId,
+        sequence: userSequence + 1,
         role: "assistant",
         content: input.assistantContent,
         modelUsed: input.modelUsed,
@@ -391,13 +401,18 @@ function createSupabaseRepository(): Repository {
       const limit = options.limit ?? 24;
       let query = db
         .from("messages")
-        .select("id,conversation_id,role,content,model_used,mode,image_present,crisis_detected,created_at")
+        .select("id,conversation_id,message_sequence,role,content,model_used,mode,image_present,crisis_detected,created_at")
         .eq("conversation_id", conversationId)
+        .order("message_sequence", { ascending: false })
         .order("created_at", { ascending: false })
         .order("id", { ascending: false });
       if (options.before) {
         query = query.or(
-          `created_at.lt.${options.before.createdAt},and(created_at.eq.${options.before.createdAt},id.lt.${options.before.id})`
+          [
+            `message_sequence.lt.${options.before.sequence}`,
+            `and(message_sequence.eq.${options.before.sequence},created_at.lt.${options.before.createdAt})`,
+            `and(message_sequence.eq.${options.before.sequence},created_at.eq.${options.before.createdAt},id.lt.${options.before.id})`
+          ].join(",")
         );
       }
       const { data, error } = await query
@@ -417,7 +432,7 @@ function createSupabaseRepository(): Repository {
           image_present: Boolean(input.imagePresent),
           crisis_detected: Boolean(input.crisisDetected)
         })
-        .select("id,conversation_id,role,content,model_used,mode,image_present,crisis_detected,created_at")
+        .select("id,conversation_id,message_sequence,role,content,model_used,mode,image_present,crisis_detected,created_at")
         .single();
       if (error) throw error;
       return mapMessage(data);
@@ -518,6 +533,7 @@ function createSupabaseRepository(): Repository {
         assistantMessage: {
           id: row.assistant_id,
           conversationId: row.assistant_conversation_id,
+          sequence: Number(row.assistant_message_sequence),
           role: row.assistant_role,
           content: row.assistant_content,
           modelUsed: row.assistant_model_used,
@@ -549,6 +565,7 @@ function mapMessage(row: any): Message {
   return {
     id: row.id,
     conversationId: row.conversation_id,
+    sequence: Number(row.message_sequence),
     role: row.role,
     content: row.content,
     modelUsed: row.model_used,
@@ -557,6 +574,14 @@ function mapMessage(row: any): Message {
     crisisDetected: row.crisis_detected,
     createdAt: row.created_at
   };
+}
+
+function nextMessageSequence(messages: Map<string, Message>, conversationId: string) {
+  let latest = 0;
+  for (const message of messages.values()) {
+    if (message.conversationId === conversationId) latest = Math.max(latest, message.sequence);
+  }
+  return latest + 1;
 }
 
 function mapMemory(row: any): Memory {

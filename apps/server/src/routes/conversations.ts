@@ -48,14 +48,22 @@ export function conversationsRouter(repository: Repository) {
   return router;
 }
 
-function encodeCursor(message: { createdAt: string; id: string }) {
-  return Buffer.from(JSON.stringify({ createdAt: message.createdAt, id: message.id })).toString("base64url");
+function encodeCursor(message: { sequence: number; createdAt: string; id: string }) {
+  return Buffer.from(
+    JSON.stringify({ sequence: message.sequence, createdAt: message.createdAt, id: message.id })
+  ).toString("base64url");
 }
 
 function decodeCursor(cursor: string) {
   try {
     const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-    return z.object({ createdAt: z.string().datetime(), id: z.string().uuid() }).parse(parsed);
+    return z
+      .object({
+        sequence: z.number().int().nonnegative(),
+        createdAt: z.string().datetime(),
+        id: z.string().uuid()
+      })
+      .parse(parsed);
   } catch {
     throw new z.ZodError([
       {

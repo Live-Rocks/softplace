@@ -67,7 +67,7 @@ export type Repository = {
   listMessages(
     userId: string,
     conversationId: string,
-    options?: { limit?: number; before?: { createdAt: string; id: string } }
+    options?: { limit?: number; before?: { sequence: number; createdAt: string; id: string } }
   ): Promise<Message[]>;
   createMessage(input: CreateMessageInput): Promise<Message>;
   listMemories(userId: string): Promise<Memory[]>;

@@ -59,6 +59,7 @@
 7. `007_ava_async_companion.sql`：Ava 關係、訊息、記憶、job、每日用量與 push token。
 8. `008_ava_global_event_foundation.sql`：Ava 全域 2～3 天事件 run 與每日 phase 骨架；尚未改變 prompt。
 9. `009_ava_event_daily_details.sql`：Ava 每日全域事件細節、原子 lease 與 30 分鐘失敗重試。
+10. `010_message_sequence.sql`：安放訊息對話內流水號、原子分配 trigger 與可靠分頁排序。
 
 已執行的 migration 不回頭改寫；修正以新編號追加。執行前先讀 SQL，執行後保存結果並跑對應 smoke test。
 
@@ -67,7 +68,7 @@
 首次或 dependency 不完整：
 
 ```bash
-cd "/Users/a1/Documents/Codex/2026-06-27/ji3"
+cd "/Users/a1/Downloads/2026/softplace"
 nvm use system
 npm ci
 ```

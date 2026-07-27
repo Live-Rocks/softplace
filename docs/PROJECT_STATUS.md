@@ -32,7 +32,7 @@
 - **使用者實機確認**：Supabase Passwordless Email OTP 註冊、登入、重寄與 session。
 - **使用者實機確認**：Zeabur staging API 可從手機連線，公開健康端點為 `https://softplace.zeabur.app/health`。
 - **程式已驗證**：Node 24／npm 11 monorepo build scripts 與 Zeabur Git push 自動部署骨架。
-- **使用者實機確認**：migration `001～007` 已套用；既有聊天、記憶與用量在 server 重啟後保留。
+- **使用者實機確認**：migration `001～009` 已套用；既有聊天、記憶與用量在 server 重啟後保留。
 - **使用者實機確認**：Resend domain、Supabase custom SMTP 與六位數 OTP Email。
 
 ### 安放
@@ -44,6 +44,7 @@
 - **程式已驗證**：最近 20 則上下文、確認記憶、圖片不落庫、provider 標示。
 - **程式已驗證**：每分鐘／每小時限流、深度 reservation、成功才扣額度、timeout 與失敗釋放。
 - **程式已驗證**：危機語句在一般限流與 OpenAI 前攔截，回覆台灣真人資源。
+- **程式已驗證**：新安放訊息由對話內流水號排序；避免 user／assistant 同時間戳在重開 App 後倒置。migration `010` 尚待 staging 套用。
 
 ### Ava beta
 
