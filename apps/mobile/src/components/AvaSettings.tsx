@@ -6,7 +6,13 @@ import { api } from "../api/client";
 import { colors } from "../theme/theme";
 import { SoftButton } from "./SoftButton";
 
-export function AvaSettings({ accessToken }: { accessToken: string }) {
+type Props = {
+  accessToken: string;
+  showHeader?: boolean;
+  onChanged?: () => void;
+};
+
+export function AvaSettings({ accessToken, showHeader = true, onChanged }: Props) {
   const [state, setState] = useState<AvaState | null>(null);
   const [memories, setMemories] = useState<AvaMemory[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -25,6 +31,7 @@ export function AvaSettings({ accessToken }: { accessToken: string }) {
   async function setLevel(level: AvaProactiveLevel) {
     const response = await api.updateAvaPreferences({ proactiveLevel: level }, accessToken);
     setState(response.state);
+    onChanged?.();
   }
 
   async function saveMemory() {
@@ -37,10 +44,12 @@ export function AvaSettings({ accessToken }: { accessToken: string }) {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Ava</Text>
-        <Text style={styles.muted}>Ava 是 AI 虛擬朋友。她會用自己的生活節奏回覆，也可能主動傳訊息。</Text>
-      </View>
+      {showHeader ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>Ava</Text>
+          <Text style={styles.muted}>Ava 是 AI 虛擬朋友。她會用自己的生活節奏回覆，也可能主動傳訊息。</Text>
+        </View>
+      ) : null}
 
       <View style={styles.group}>
         <Text style={styles.label}>主動訊息</Text>
@@ -54,6 +63,14 @@ export function AvaSettings({ accessToken }: { accessToken: string }) {
             />
           ))}
         </View>
+        {state ? (
+          <View style={styles.frequencyDescription}>
+            <Text style={styles.frequencyText}>
+              {proactiveFrequencyDescription(state.preferences.proactiveLevel)}
+            </Text>
+            <Text style={styles.muted}>實際時間會依 Ava 的生活節奏與你們的聊天狀態調整。</Text>
+          </View>
+        ) : null}
         <Text style={styles.muted}>Ava 的休息時間：00:00–08:00</Text>
       </View>
 
@@ -72,7 +89,7 @@ export function AvaSettings({ accessToken }: { accessToken: string }) {
                 <Text style={styles.memoryText}>{memory.content}</Text>
                 <View style={styles.actions}>
                   <SoftButton label="修改" icon={Pencil} tone="quiet" onPress={() => { setEditingId(memory.id); setEditingText(memory.content); }} />
-                  <SoftButton label="刪除" icon={Trash2} tone="danger" onPress={async () => { await api.deleteAvaMemory(memory.id, accessToken); await load(); }} />
+                  <SoftButton label="刪除" icon={Trash2} tone="danger" onPress={async () => { await api.deleteAvaMemory(memory.id, accessToken); await load(); onChanged?.(); }} />
                 </View>
               </>
             )}
@@ -86,7 +103,7 @@ export function AvaSettings({ accessToken }: { accessToken: string }) {
         tone="danger"
         onPress={() => Alert.alert("清除 Ava 資料", "這會永久刪除你和 Ava 的訊息、關係進度與記憶。", [
           { text: "取消", style: "cancel" },
-          { text: "清除", style: "destructive", onPress: async () => { await api.deleteAvaRelationship(accessToken); await load(); } }
+          { text: "清除", style: "destructive", onPress: async () => { await api.deleteAvaRelationship(accessToken); await load(); onChanged?.(); } }
         ])}
       />
     </View>
@@ -100,9 +117,19 @@ const styles = StyleSheet.create({
   group: { gap: 10 },
   label: { color: colors.ink, fontWeight: "800" },
   muted: { color: colors.muted, lineHeight: 21 },
+  frequencyDescription: { gap: 3 },
+  frequencyText: { color: colors.ink, lineHeight: 21 },
   segment: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   memory: { gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderColor: colors.line },
   memoryText: { color: colors.ink, lineHeight: 21 },
   actions: { flexDirection: "row", gap: 8 },
   input: { minHeight: 72, borderWidth: 1, borderColor: colors.line, borderRadius: 8, padding: 10, color: colors.ink, backgroundColor: colors.surface }
 });
+
+function proactiveFrequencyDescription(level: AvaProactiveLevel) {
+  return {
+    off: "Ava 不會主動傳訊息。",
+    low: "Ava 最多每 2 天主動傳一次。",
+    normal: "Ava 最多每天主動傳一次。"
+  }[level];
+}

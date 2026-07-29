@@ -9,11 +9,12 @@ import { colors } from "../theme/theme";
 type Props = {
   accessToken: string;
   embedded?: boolean;
+  showHeader?: boolean;
 };
 
 const memoryMaxLength = 300;
 
-export function MemoriesScreen({ accessToken, embedded = false }: Props) {
+export function MemoriesScreen({ accessToken, embedded = false, showHeader = true }: Props) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [content, setContent] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -63,10 +64,14 @@ export function MemoriesScreen({ accessToken, embedded = false }: Props) {
 
   const contentView = (
     <>
-      <View style={styles.header}>
-        <Text style={styles.title}>我記得的事</Text>
+      {showHeader ? (
+        <View style={styles.header}>
+          <Text style={styles.title}>我記得的事</Text>
+          <Text style={styles.subtitle}>只保存你確認過、想讓我記住的事。每一條都可以修改或刪除。</Text>
+        </View>
+      ) : (
         <Text style={styles.subtitle}>只保存你確認過、想讓我記住的事。每一條都可以修改或刪除。</Text>
-      </View>
+      )}
 
       <View style={styles.addBox}>
         <TextInput

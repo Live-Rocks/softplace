@@ -209,6 +209,7 @@ function AppContent() {
         <View style={[styles.screen, tab !== "settings" && styles.hidden]}>
           <SettingsScreen
             accessToken={token}
+            active={tab === "settings"}
             email={session.user.email ?? ""}
             pushRegistration={pushRegistration}
             onRetryPushRegistration={registerPush}
