@@ -136,52 +136,72 @@ test("Ava prompt discloses AI truthfully and includes shared life without claimi
   assert.match(prompt, /最近一則訊息傳來時：正在桌前改文案/);
   assert.match(prompt, /目前：出門買晚餐/);
   assert.match(prompt, /不必每次主動報告行程/);
-  assert.match(prompt, /今日持續中的生活背景/);
+  assert.match(prompt, /偶爾可帶出的具體生活片刻/);
   assert.match(prompt, /不要重述、報進度/);
+  assert.match(prompt, /不代表這件事仍在持續未完/);
   assert.doesNotMatch(prompt, /startMinute|endMinute|delayMinutes/);
 });
 
-test("Ava global event definitions have aligned 2-to-3-day phases without other people", () => {
+test("Ava global event definitions balance work and life with a clear ending", () => {
   const events = listAvaEventDefinitions();
-  assert.ok(events.length >= 2);
+  assert.ok(events.length >= 10);
+  assert.equal(events.filter((event) => event.category === "work").length, events.filter((event) => event.category === "life").length);
   for (const event of events) {
     assert.ok(event.durationDays === 2 || event.durationDays === 3, event.key);
     assert.equal(event.phases.length, event.durationDays, event.key);
     assert.equal(getAvaEventPhase(event.key, event.durationDays).key, event.phases.at(-1)?.key);
+    assert.ok(["complete", "transition"].includes(event.phases.at(-1)?.completion ?? ""), event.key);
     assert.doesNotMatch(
-      event.phases.map((phase) => `${phase.activity} ${phase.moodNote}`).join(" "),
+      event.phases.map((phase) => `${phase.activity} ${phase.moodNote} ${phase.scene} ${phase.visibleDetails.join(" ")}`).join(" "),
       /(朋友|家人|伴侶|同事|團隊|客戶|老師|醫生)/,
       event.key
     );
+    for (const phase of event.phases) {
+      assert.ok(phase.visibleDetails.length > 0, `${event.key}:${phase.key}`);
+      assert.ok(phase.scene.length > 0, `${event.key}:${phase.key}`);
+      assert.ok(phase.progress.length > 0, `${event.key}:${phase.key}`);
+    }
   }
 });
 
-test("Ava event selection is deterministic and avoids immediately repeating the previous run", () => {
-  const first = selectNextAvaEvent({ startDate: "2026-07-25", previousEventKey: "copywriting-sprint" });
-  const again = selectNextAvaEvent({ startDate: "2026-07-25", previousEventKey: "copywriting-sprint" });
+test("Ava event selection is deterministic, avoids the last three runs, and rebalances categories", () => {
+  const input = {
+    startDate: "2026-07-25",
+    recentEventKeys: ["brand-proposal-revision", "photo-final-pass", "copywriting-sprint"]
+  };
+  const first = selectNextAvaEvent(input);
+  const again = selectNextAvaEvent(input);
   assert.equal(first.key, again.key);
-  assert.notEqual(first.key, "copywriting-sprint");
+  assert.ok(!input.recentEventKeys.includes(first.key));
+  assert.equal(first.category, "life");
 });
 
-test("Ava event daily detail only uses its own phase and a same-run previous detail", () => {
+test("Ava event daily detail input includes concrete scene clues and a same-run previous detail", () => {
   const prompt = buildAvaEventDetailInput({
     eventKey: "copywriting-sprint",
     eventDay: 2,
     phaseKey: "refine",
-    activity: "收整語氣和最後幾個段落",
-    moodNote: "慢慢有了收束感，不再那麼急",
+    activity: "把文案讀過一遍後定下最後版本",
+    moodNote: "不再那麼急，想讓它停在剛好的地方",
+    scene: "從頭默讀一遍，把最後兩個句子的節奏換得更乾淨",
+    visibleDetails: ["被標記的兩句話", "闔上的筆記本"],
+    progress: "今天這段文字已經定下來，先把它留在這裡",
+    completion: "complete",
     previousDetail: "昨天先把零散的句子重新排過一次。"
   });
   assert.match(prompt, /第 2 天/);
   assert.match(prompt, /昨天先把零散的句子/);
-  assert.match(buildAvaEventDetailInstructions(), /不得新增其他人物/);
+  assert.match(prompt, /可見線索：被標記的兩句話、闔上的筆記本/);
+  assert.match(buildAvaEventDetailInstructions(), /匿名互動限店員、櫃台、路人或店家/);
+  assert.match(buildAvaEventDetailInstructions(), /至少一個可觀察的小片刻/);
   assert.equal(eventBackgroundFallback({ activity: "整理桌面", moodNote: "步調很慢" }), "今天正在整理桌面，心情是步調很慢。");
 });
 
-test("Ava event daily detail rejects people, direct address, and invalid lengths", () => {
-  assert.equal(validateAvaEventDetail("今天把零散的句子慢慢排好，桌上的內容終於有了比較安靜的順序。"), "今天把零散的句子慢慢排好，桌上的內容終於有了比較安靜的順序。");
+test("Ava event daily detail allows anonymous scenes but rejects relationships, direct address, and invalid lengths", () => {
+  assert.equal(validateAvaEventDetail("把幾樣蔬菜放進購物籃後，櫃台結帳時又核對了一次袋裡的東西。"), "把幾樣蔬菜放進購物籃後，櫃台結帳時又核對了一次袋裡的東西。");
   assert.equal(validateAvaEventDetail("今天和朋友一起整理內容，心裡比較不急。"), null);
   assert.equal(validateAvaEventDetail("你今天可以陪我一起把內容整理好。"), null);
+  assert.equal(validateAvaEventDetail("店員說「今天很熱」，把飲料放到桌邊。"), null);
   assert.equal(validateAvaEventDetail("今天先把內容重新排過一次。接著停下來看了看語氣。最後又改了幾句。"), null);
   assert.equal(validateAvaEventDetail("太短。"), null);
 });

@@ -163,6 +163,7 @@ export async function claimAvaDailyEventDetail(now = new Date()): Promise<AvaEve
   if (!claimed.event_key || !claimed.event_day || !claimed.phase_key || !claimed.skeleton_activity || !claimed.skeleton_mood_note) {
     throw new Error("ava_event_detail_missing_skeleton");
   }
+  const phase = getAvaEventPhase(claimed.event_key, claimed.event_day);
   return {
     workerToken,
     daily: claimed,
@@ -172,6 +173,11 @@ export async function claimAvaDailyEventDetail(now = new Date()): Promise<AvaEve
       phaseKey: claimed.phase_key,
       activity: claimed.skeleton_activity,
       moodNote: claimed.skeleton_mood_note,
+      scene: phase.scene,
+      visibleDetails: phase.visibleDetails,
+      progress: phase.progress,
+      completion: phase.completion,
+      anonymousInteraction: phase.anonymousInteraction,
       previousDetail
     })
   };
@@ -198,17 +204,19 @@ export async function releaseAvaDailyEventDetail(task: AvaEventDetailTask) {
 }
 
 async function ensureAvaEventRun(date: string): Promise<AvaEventRunRow> {
-  const previous = await admin()
+  const previousRuns = await admin()
     .from("ava_event_runs")
     .select("event_key, ends_on")
     .eq("companion_key", AVA_KEY)
     .lt("ends_on", date)
     .order("ends_on", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (previous.error) throw previous.error;
+    .limit(3);
+  if (previousRuns.error) throw previousRuns.error;
 
-  const event = selectNextAvaEvent({ startDate: date, previousEventKey: previous.data?.event_key });
+  const event = selectNextAvaEvent({
+    startDate: date,
+    recentEventKeys: (previousRuns.data ?? []).map((run) => run.event_key)
+  });
   const { data, error } = await admin().rpc("ensure_ava_event_run", {
     p_companion_key: AVA_KEY,
     p_local_date: date,
