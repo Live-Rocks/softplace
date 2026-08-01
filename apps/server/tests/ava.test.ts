@@ -14,6 +14,7 @@ import {
   buildAvaEventDetailInput,
   buildAvaEventDetailInstructions,
   eventBackgroundFallback,
+  getAvaEventDefinition,
   getAvaEventPhase,
   listAvaEventDefinitions,
   selectNextAvaEvent,
@@ -125,6 +126,14 @@ test("Ava prompt discloses AI truthfully and includes shared life without claimi
     receivedActivity: "正在桌前改文案",
     currentActivity: "出門買晚餐",
     currentTone: "剛放下工作，語氣慢慢鬆下來",
+    eventContext: {
+      title: "文案改寫",
+      day: 1,
+      activity: "改寫一段內容文案",
+      moodNote: "在不同句子之間找更剛好的語氣",
+      progress: "語氣開始靠近想要的方向，還在慢慢試",
+      completion: "begin"
+    },
     eventBackground: "今天慢慢把一段文案收整到比較安靜的狀態。",
     memories: ["我喜歡清淡一點的菜"],
     proactive: false
@@ -137,6 +146,10 @@ test("Ava prompt discloses AI truthfully and includes shared life without claimi
   assert.match(prompt, /目前：出門買晚餐/);
   assert.match(prompt, /不必每次主動報告行程/);
   assert.match(prompt, /偶爾可帶出的具體生活片刻/);
+  assert.match(prompt, /持續事件骨架/);
+  assert.match(prompt, /文案改寫，第 1 天/);
+  assert.match(prompt, /今天是改寫一段內容文案/);
+  assert.match(prompt, /事件底色：在不同句子之間找更剛好的語氣/);
   assert.match(prompt, /不要重述、報進度/);
   assert.match(prompt, /不代表這件事仍在持續未完/);
   assert.doesNotMatch(prompt, /startMinute|endMinute|delayMinutes/);
@@ -148,6 +161,8 @@ test("Ava global event definitions balance work and life with a clear ending", (
   assert.equal(events.filter((event) => event.category === "work").length, events.filter((event) => event.category === "life").length);
   for (const event of events) {
     assert.ok(event.durationDays === 2 || event.durationDays === 3, event.key);
+    assert.ok(event.title.length > 0, event.key);
+    assert.ok(event.anchorTerms.length > 0, event.key);
     assert.equal(event.phases.length, event.durationDays, event.key);
     assert.equal(getAvaEventPhase(event.key, event.durationDays).key, event.phases.at(-1)?.key);
     assert.ok(["complete", "transition"].includes(event.phases.at(-1)?.completion ?? ""), event.key);
@@ -183,6 +198,8 @@ test("Ava event daily detail input includes concrete scene clues and a same-run 
     phaseKey: "refine",
     activity: "把文案讀過一遍後定下最後版本",
     moodNote: "不再那麼急，想讓它停在剛好的地方",
+    eventTitle: "文案改寫",
+    anchorTerms: ["文案", "句子", "段落"],
     scene: "從頭默讀一遍，把最後兩個句子的節奏換得更乾淨",
     visibleDetails: ["被標記的兩句話", "闔上的筆記本"],
     progress: "今天這段文字已經定下來，先把它留在這裡",
@@ -190,6 +207,8 @@ test("Ava event daily detail input includes concrete scene clues and a same-run 
     previousDetail: "昨天先把零散的句子重新排過一次。"
   });
   assert.match(prompt, /第 2 天/);
+  assert.match(prompt, /文案改寫/);
+  assert.match(prompt, /必須保留的事件錨點之一：文案、句子、段落/);
   assert.match(prompt, /昨天先把零散的句子/);
   assert.match(prompt, /可見線索：被標記的兩句話、闔上的筆記本/);
   assert.match(buildAvaEventDetailInstructions(), /匿名互動限店員、櫃台、路人或店家/);
@@ -197,11 +216,18 @@ test("Ava event daily detail input includes concrete scene clues and a same-run 
   assert.equal(eventBackgroundFallback({ activity: "整理桌面", moodNote: "步調很慢" }), "今天正在整理桌面，心情是步調很慢。");
 });
 
-test("Ava event daily detail allows anonymous scenes but rejects relationships, direct address, and invalid lengths", () => {
-  assert.equal(validateAvaEventDetail("把幾樣蔬菜放進購物籃後，櫃台結帳時又核對了一次袋裡的東西。"), "把幾樣蔬菜放進購物籃後，櫃台結帳時又核對了一次袋裡的東西。");
+test("Ava event daily detail preserves event anchors and rejects relationships, direct address, and invalid lengths", () => {
+  assert.equal(validateAvaEventDetail("把幾樣蔬菜放進購物籃後，櫃台結帳時又核對了一次袋裡的東西。", ["蔬菜", "食材"]), "把幾樣蔬菜放進購物籃後，櫃台結帳時又核對了一次袋裡的東西。");
+  assert.equal(validateAvaEventDetail("把幾樣東西放進購物籃後，櫃台結帳時又核對了一次袋裡的東西。", ["蔬菜", "食材"]), null);
   assert.equal(validateAvaEventDetail("今天和朋友一起整理內容，心裡比較不急。"), null);
   assert.equal(validateAvaEventDetail("你今天可以陪我一起把內容整理好。"), null);
   assert.equal(validateAvaEventDetail("店員說「今天很熱」，把飲料放到桌邊。"), null);
   assert.equal(validateAvaEventDetail("今天先把內容重新排過一次。接著停下來看了看語氣。最後又改了幾句。"), null);
   assert.equal(validateAvaEventDetail("太短。"), null);
+});
+
+test("Ava keeps established event keys resolvable for existing global runs", () => {
+  assert.equal(getAvaEventDefinition("copywriting-sprint").title, "文案改寫");
+  assert.equal(getAvaEventDefinition("brand-proposal-revision").title, "品牌提案修改");
+  assert.equal(getAvaEventDefinition("reset-weekend").title, "週末整理散步");
 });

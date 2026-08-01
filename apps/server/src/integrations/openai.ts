@@ -155,10 +155,11 @@ export async function generateAvaReply(input: {
 export async function generateAvaEventDetail(input: {
   activity: string;
   moodNote: string;
+  anchorTerms: readonly string[];
   prompt: string;
 }) {
   if (config.aiProvider === "local") {
-    return `今天慢慢處理${input.activity}，心裡還留著${input.moodNote}。`;
+    return `今天慢慢處理${input.activity}，眼前還留著${input.anchorTerms[0] ?? "手邊的事"}，心裡是${input.moodNote}。`;
   }
   if (!client) throw new CompanionProviderError(new Error("OPENAI_API_KEY is not configured"));
 
@@ -170,7 +171,7 @@ export async function generateAvaEventDetail(input: {
       store: config.openAiStoreResponses,
       safety_identifier: hashUserId("ava-global-event")
     } as any);
-    const detail = validateAvaEventDetail(response.output_text ?? "");
+    const detail = validateAvaEventDetail(response.output_text ?? "", input.anchorTerms);
     if (!detail) throw new Error("invalid_ava_event_detail");
     return detail;
   } catch (error) {

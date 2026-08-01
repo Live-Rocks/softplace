@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { config } from "../config.js";
 import { buildAvaInput, buildAvaInstructions, extractSafeAvaMemory, getAvaLifeContext, relationshipStage } from "../domain/ava.js";
-import { eventBackgroundFallback } from "../domain/avaEvents.js";
+import { eventBackgroundFallback, getAvaEventDefinition, getAvaEventPhase } from "../domain/avaEvents.js";
 import {
   claimAvaDailyEventDetail,
   claimAvaJobs,
@@ -16,6 +16,7 @@ import {
   ensureAvaDailyState,
   scheduleEligibleProactiveJobs
 } from "../integrations/avaRepository.js";
+import type { AvaDailyState } from "../integrations/avaRepository.js";
 import { sendAvaPush } from "../integrations/expoPush.js";
 import { generateAvaEventDetail, generateAvaReply } from "../integrations/openai.js";
 
@@ -42,6 +43,7 @@ export function companionWorkerRouter() {
           const currentLife = getAvaLifeContext();
           const latestUser = proactive ? undefined : [...context.messages].reverse().find((message) => message.role === "user");
           const receivedLife = latestUser ? getAvaLifeContext(new Date(latestUser.createdAt)) : undefined;
+          const eventContext = resolveEventContext(context.daily);
           const instructions = buildAvaInstructions({
             relationship: relationshipStage(context.user.relationship_started_at, context.user.reply_count),
             activity: context.daily.activity,
@@ -49,6 +51,7 @@ export function companionWorkerRouter() {
             receivedActivity: receivedLife?.currentActivity,
             currentActivity: currentLife.currentActivity,
             currentTone: currentLife.tone,
+            eventContext,
             eventBackground: context.daily.event_detail ?? eventBackgroundFallback({
               activity: context.daily.skeleton_activity ?? context.daily.activity,
               moodNote: context.daily.skeleton_mood_note ?? context.daily.mood_note
@@ -91,6 +94,7 @@ export function companionWorkerRouter() {
           const detail = await generateAvaEventDetail({
             activity: detailTask.daily.skeleton_activity!,
             moodNote: detailTask.daily.skeleton_mood_note!,
+            anchorTerms: getAvaEventDefinition(detailTask.daily.event_key!).anchorTerms,
             prompt: detailTask.prompt
           });
           await completeAvaDailyEventDetail(detailTask, detail);
@@ -106,4 +110,18 @@ export function companionWorkerRouter() {
     }
   });
   return router;
+}
+
+function resolveEventContext(daily: AvaDailyState) {
+  if (!daily.event_key || !daily.event_day || !daily.skeleton_activity || !daily.skeleton_mood_note) return undefined;
+  const event = getAvaEventDefinition(daily.event_key);
+  const phase = getAvaEventPhase(daily.event_key, daily.event_day);
+  return {
+    title: event.title,
+    day: daily.event_day,
+    activity: daily.skeleton_activity,
+    moodNote: daily.skeleton_mood_note,
+    progress: phase.progress,
+    completion: phase.completion
+  };
 }

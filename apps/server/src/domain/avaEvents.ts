@@ -13,16 +13,20 @@ export type AvaEventPhase = {
 
 export type AvaEventDefinition = {
   key: string;
+  title: string;
   category: AvaEventCategory;
   durationDays: 2 | 3;
+  anchorTerms: readonly string[];
   phases: readonly AvaEventPhase[];
 };
 
 const eventDefinitions: readonly AvaEventDefinition[] = [
   {
     key: "brand-proposal-revision",
+    title: "品牌提案修改",
     category: "work",
     durationDays: 3,
+    anchorTerms: ["提案", "簡報", "品牌"],
     phases: [
       {
         key: "outline",
@@ -55,8 +59,10 @@ const eventDefinitions: readonly AvaEventDefinition[] = [
   },
   {
     key: "photo-final-pass",
+    title: "照片挑選",
     category: "work",
     durationDays: 2,
+    anchorTerms: ["照片", "畫面", "縮圖"],
     phases: [
       {
         key: "review",
@@ -80,8 +86,10 @@ const eventDefinitions: readonly AvaEventDefinition[] = [
   },
   {
     key: "copywriting-sprint",
+    title: "文案改寫",
     category: "work",
     durationDays: 2,
+    anchorTerms: ["文案", "句子", "段落"],
     phases: [
       {
         key: "rewrite",
@@ -105,8 +113,10 @@ const eventDefinitions: readonly AvaEventDefinition[] = [
   },
   {
     key: "cafe-final-pass",
+    title: "咖啡店工作",
     category: "work",
     durationDays: 2,
+    anchorTerms: ["咖啡店", "電腦", "檔案"],
     phases: [
       {
         key: "focus",
@@ -131,8 +141,10 @@ const eventDefinitions: readonly AvaEventDefinition[] = [
   },
   {
     key: "content-research-day",
+    title: "內容資料蒐集",
     category: "work",
     durationDays: 2,
+    anchorTerms: ["資料", "分頁", "筆記"],
     phases: [
       {
         key: "collect",
@@ -156,8 +168,10 @@ const eventDefinitions: readonly AvaEventDefinition[] = [
   },
   {
     key: "home-refresh",
+    title: "房間整理",
     category: "life",
     durationDays: 2,
+    anchorTerms: ["房間", "桌面", "床單"],
     phases: [
       {
         key: "clear",
@@ -181,8 +195,10 @@ const eventDefinitions: readonly AvaEventDefinition[] = [
   },
   {
     key: "grocery-and-cooking",
+    title: "補貨做飯",
     category: "life",
     durationDays: 2,
+    anchorTerms: ["食材", "蔬菜", "廚房"],
     phases: [
       {
         key: "restock",
@@ -207,8 +223,10 @@ const eventDefinitions: readonly AvaEventDefinition[] = [
   },
   {
     key: "bookstore-walk",
+    title: "書店散步",
     category: "life",
     durationDays: 2,
+    anchorTerms: ["書店", "書", "書架"],
     phases: [
       {
         key: "browse",
@@ -232,8 +250,10 @@ const eventDefinitions: readonly AvaEventDefinition[] = [
   },
   {
     key: "reset-weekend",
+    title: "週末整理散步",
     category: "life",
     durationDays: 2,
+    anchorTerms: ["桌面", "房間", "散步"],
     phases: [
       {
         key: "tidy",
@@ -257,8 +277,10 @@ const eventDefinitions: readonly AvaEventDefinition[] = [
   },
   {
     key: "slow-sunday",
+    title: "慢週日家務",
     category: "life",
     durationDays: 2,
+    anchorTerms: ["衣服", "洗衣機", "家務"],
     phases: [
       {
         key: "laundry",
@@ -317,6 +339,8 @@ export function buildAvaEventDetailInput(input: {
   phaseKey: string;
   activity: string;
   moodNote: string;
+  eventTitle: string;
+  anchorTerms: readonly string[];
   scene: string;
   visibleDetails: readonly string[];
   progress: string;
@@ -325,10 +349,11 @@ export function buildAvaEventDetailInput(input: {
   previousDetail?: string | null;
 }) {
   return [
-    `事件：${input.eventKey}`,
+    `事件：${input.eventKey}（${input.eventTitle}）`,
     `第 ${input.eventDay} 天，phase：${input.phaseKey}，進度：${input.completion}`,
     `今天的活動：${input.activity}`,
     `今天的情緒底色：${input.moodNote}`,
+    `必須保留的事件錨點之一：${input.anchorTerms.join("、")}`,
     `可用場景：${input.scene}`,
     `可見線索：${input.visibleDetails.join("、")}`,
     `今天應有的進度變化：${input.progress}`,
@@ -337,13 +362,14 @@ export function buildAvaEventDetailInput(input: {
   ].join("\n");
 }
 
-export function validateAvaEventDetail(value: string) {
+export function validateAvaEventDetail(value: string, anchorTerms?: readonly string[]) {
   const detail = value.replace(/\s+/g, " ").trim();
   if (detail.length < 20 || detail.length > 180) return null;
   const sentenceCount = detail.match(/[。！？!?]/g)?.length ?? 0;
   if (sentenceCount < 1 || sentenceCount > 2) return null;
   if (/[「」『』"“”]/.test(detail)) return null;
   if (/(朋友|家人|伴侶|同事|客戶|團隊|主管|老師|醫生|見面|碰面|約會|傳訊息|收到訊息|你|妳|使用者)/.test(detail)) return null;
+  if (anchorTerms?.length && !anchorTerms.some((anchor) => detail.includes(anchor))) return null;
   return detail;
 }
 

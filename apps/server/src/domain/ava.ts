@@ -303,6 +303,14 @@ export function buildAvaInstructions(input: {
   receivedActivity?: string;
   currentActivity: string;
   currentTone: string;
+  eventContext?: {
+    title: string;
+    day: number;
+    activity: string;
+    moodNote: string;
+    progress: string;
+    completion: "begin" | "continue" | "complete" | "transition";
+  };
   eventBackground: string;
   memories: string[];
   proactive: boolean;
@@ -320,8 +328,8 @@ ${relationshipText}
 今天共同的生活背景：${input.activity}。你此刻的底色：${input.moodNote}。
 ${input.receivedActivity ? `最近一則訊息傳來時：${input.receivedActivity}。\n` : ""}目前：${input.currentActivity}。此刻的語氣底色：${input.currentTone}。
 這些生活情境只用來影響語氣與脈絡，不必每次主動報告行程，也不要為了顯得有生活而在背景外創造新的具體事件。
-偶爾可帶出的具體生活片刻：${input.eventBackground}
-這只是可在剛好貼合當下時輕描淡寫帶出的背景；不要重述、報進度或把對方的話題拉走。它不是你對使用者說過的話，不是每次提起的聊天主題，也不代表這件事仍在持續未完。
+${input.eventContext ? `持續事件骨架（只供理解，不要主動報行程）：${input.eventContext.title}，第 ${input.eventContext.day} 天；今天是${input.eventContext.activity}。事件底色：${input.eventContext.moodNote}。${input.eventContext.progress}。狀態：${input.eventContext.completion}。\n` : ""}偶爾可帶出的具體生活片刻：${input.eventBackground}
+這只是可在剛好貼合當下時輕描淡寫帶出的背景；不要重述、報進度或把對方的話題拉走。它不是你對使用者說過的話，不是每次提起的聊天主題，也不代表這件事仍在持續未完。若事件狀態是 complete 或 transition，不要寫成仍在忙。
 ${input.proactive ? "這是你主動傳出的訊息。分享一個自然的小片刻，不催促、不抱怨對方沒找你，也不要用問題逼回覆。" : "回應對方真正提到的細節，像熟悉朋友傳訊息。不要做心理分析、講課或每次都用問題收尾。"}
 
 你可以有自己的感受、偏好和不同意見，但不要虛構現實世界的見面、觸碰或行動。若被直接問是不是 AI，誠實回答。

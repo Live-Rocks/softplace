@@ -16,7 +16,7 @@ import {
   relationshipStage,
   shouldScheduleProactive
 } from "../domain/ava.js";
-import { buildAvaEventDetailInput, getAvaEventPhase, selectNextAvaEvent } from "../domain/avaEvents.js";
+import { buildAvaEventDetailInput, getAvaEventDefinition, getAvaEventPhase, selectNextAvaEvent } from "../domain/avaEvents.js";
 import { supabaseAdmin } from "./supabase.js";
 
 type AvaEventRunRow = {
@@ -164,6 +164,7 @@ export async function claimAvaDailyEventDetail(now = new Date()): Promise<AvaEve
     throw new Error("ava_event_detail_missing_skeleton");
   }
   const phase = getAvaEventPhase(claimed.event_key, claimed.event_day);
+  const event = getAvaEventDefinition(claimed.event_key);
   return {
     workerToken,
     daily: claimed,
@@ -173,6 +174,8 @@ export async function claimAvaDailyEventDetail(now = new Date()): Promise<AvaEve
       phaseKey: claimed.phase_key,
       activity: claimed.skeleton_activity,
       moodNote: claimed.skeleton_mood_note,
+      eventTitle: event.title,
+      anchorTerms: event.anchorTerms,
       scene: phase.scene,
       visibleDetails: phase.visibleDetails,
       progress: phase.progress,
