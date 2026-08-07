@@ -26,7 +26,7 @@ sequenceDiagram
     participant R as Resend SMTP
     participant S as Express API
 
-    U->>M: 輸入 Email、確認已滿 18 歲
+    U->>M: 輸入 Email
     M->>A: signInWithOtp
     A->>R: 寄送六位數 OTP
     R-->>U: Email

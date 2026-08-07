@@ -1,8 +1,8 @@
 # SoftPlace 專案狀態
 
-最後核對：`2026-07-27`
+最後核對：`2026-08-07`
 
-基準 commit：`b008f60`
+基準 commit：`d81c674`
 
 目前階段：本人使用／少量封測前的 staging
 
@@ -30,6 +30,7 @@
 ### 核心與部署
 
 - **使用者實機確認**：Supabase Passwordless Email OTP 註冊、登入、重寄與 session。
+- **程式已驗證**：登入不設定年齡門檻，Email OTP 只需有效 Email；安全與危機資源說明維持原有邊界。
 - **使用者實機確認**：Zeabur staging API 可從手機連線，公開健康端點為 `https://softplace.zeabur.app/health`。
 - **程式已驗證**：Node 24／npm 11 monorepo build scripts 與 Zeabur Git push 自動部署骨架。
 - **使用者實機確認**：migration `001～010` 已套用；既有聊天、記憶與用量在 server 重啟後保留。
@@ -66,7 +67,7 @@
 - **已知競態**：若使用者在 reply job 已被 lease、Worker 已取得 context 後再補傳訊息，message id 可能被加進 job payload，但該次生成未必讀到新訊息。
 - **實驗中**：Ava 的延遲、主動性、句子泡泡與「像真人」程度仍需長期觀察；不能只以單次回覆判定。
 - **實驗中**：安放 prompt 與模型語氣仍會隨上下文產生變化，輕量／深度規則不是程式硬性句數限制。
-- **維運限制**：OpenAI debug logs 預設關閉；短暫開啟會增加私密內容暴露風險。
+- **維運限制**：OpenAI debug logs 預設關閉；短暫開啟會增加私人內容暴露風險。
 
 ## 近期優先順序
 
@@ -80,12 +81,12 @@
 
 - 正式付款、訂閱與方案升降級。
 - Google／Apple 等第三方登入。
-- 公開上架、未成年人流程與多地區危機資源。
+- 公開上架與多地區危機資源。
 - 自動摘要、embedding、pgvector／RAG。
 - 語音輸入、語音回覆與即時通話。
 - 文字模擬寵物。
 - 多角色、角色市場或拆分成另一個 App。
-- 公開社群、配對與成人內容。
+- 公開社群、配對與角色市場。
 
 ## 更新規則
 

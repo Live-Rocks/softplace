@@ -1,5 +1,5 @@
 import type { AuthError } from "@supabase/supabase-js";
-import { CheckSquare2, HeartHandshake, Square } from "lucide-react-native";
+import { HeartHandshake } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -51,7 +51,6 @@ export function LoginScreen() {
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [verificationEmail, setVerificationEmail] = useState("");
-  const [accepted, setAccepted] = useState(false);
   const [step, setStep] = useState<AuthStep>("email");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -79,7 +78,7 @@ export function LoginScreen() {
   }
 
   async function sendCode() {
-    if (!supabase || !email.trim() || !accepted || authRequestInFlight.current) return;
+    if (!supabase || !email.trim() || authRequestInFlight.current) return;
     const normalizedEmail = email.trim().toLowerCase();
     authRequestInFlight.current = true;
     setLoading(true);
@@ -191,29 +190,15 @@ export function LoginScreen() {
                 textContentType="emailAddress"
                 onSubmitEditing={sendCode}
               />
-              <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: accepted }}
-                hitSlop={8}
-                onPress={() => setAccepted((current) => !current)}
-                style={({ pressed }) => [styles.ageRow, pressed && styles.pressed]}
-              >
-                {accepted ? (
-                  <CheckSquare2 size={22} color={colors.accent} />
-                ) : (
-                  <Square size={22} color={colors.muted} />
-                )}
-                <Text style={styles.ageLabel}>我已滿 18 歲</Text>
-              </Pressable>
               <Text style={styles.note}>
-                私密成人測試版。SoftPlace 不提供心理治療或診斷；如果有立即危險，請聯絡真人與當地緊急資源。
+                目前為小規模測試版。SoftPlace 不提供心理治療或診斷；如果有立即危險，請聯絡真人與當地緊急資源。
               </Text>
               <SoftButton
                 label="寄送登入驗證碼"
                 icon={HeartHandshake}
                 onPress={sendCode}
                 loading={loading}
-                disabled={!isSupabaseConfigured || !email.trim() || !accepted}
+                disabled={!isSupabaseConfigured || !email.trim()}
               />
             </>
           ) : (
@@ -327,18 +312,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     color: colors.ink,
     fontSize: 16
-  },
-  ageRow: {
-    minHeight: 32,
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 10
-  },
-  ageLabel: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "600"
   },
   otpInput: {
     fontSize: 24,

@@ -14,7 +14,7 @@
 
 - 日期：2026-06-28
 - 狀態：Accepted
-- 背景：情緒陪伴內容高度私密，產品不需要 OpenAI Conversations 保存狀態。
+- 背景：情緒陪伴內容高度私人，產品不需要 OpenAI Conversations 保存狀態。
 - 決定：所有 Responses request 預設 `store:false`，由 Supabase 提供歷史；使用 hashed `safety_identifier`。
 - 影響：OpenAI Platform Logs 預設不提供完整可展開 Response；除錯時只能以虛構內容短暫開啟 store/debug，完成後關閉。
 
@@ -97,3 +97,11 @@
 - 背景：一般聊天會在同一個資料庫 transaction 內寫入 user 與 assistant 訊息，兩者可能取得相同 `created_at`；以 UUID 作同時間排序會造成重開後順序不穩定。
 - 決定：`messages` 由資料庫 trigger 分配每個 conversation 內連續的 `message_sequence`；歷史讀取、分頁 cursor 與模型最近 20 則上下文均以此排序。既有訊息維持 legacy 序號 `0`，不回填或重排。
 - 影響：新訊息的因果順序可被保證；舊歷史保留原貌，測試資料可透過清除對話建立新的正確時間線。
+
+## ADR-013：登入不設定年齡門檻
+
+- 日期：2026-08-07
+- 狀態：Accepted
+- 背景：SoftPlace 的實際功能是一般情緒陪伴，原本的年齡確認會造成不必要的限制，也容易讓使用者對內容性質產生錯誤期待。
+- 決定：移除登入頁的年齡確認與相關文案，Email OTP 登入只需有效 Email；產品仍保留心理治療、診斷與危機救援的既有邊界。
+- 影響：產品定位與實際內容一致，更多使用者可以進入；未來設計文案與功能時，不以年齡限制取代清楚的安全與資料控制說明。
