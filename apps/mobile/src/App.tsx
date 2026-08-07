@@ -1,7 +1,8 @@
 import type { Session } from "@supabase/supabase-js";
 import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, AppState, Keyboard, StatusBar, StyleSheet, View } from "react-native";
+import { ActivityIndicator, AppState, StatusBar, StyleSheet, View } from "react-native";
+import { KeyboardProvider, useKeyboardState } from "react-native-keyboard-controller";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { api } from "./api/client";
 import { TabBar } from "./components/TabBar";
@@ -21,9 +22,11 @@ import type { AppTab } from "./types";
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AppContent />
-    </SafeAreaProvider>
+    <KeyboardProvider preload={false}>
+      <SafeAreaProvider>
+        <AppContent />
+      </SafeAreaProvider>
+    </KeyboardProvider>
   );
 }
 
@@ -33,7 +36,7 @@ function AppContent() {
   const [tab, setTab] = useState<AppTab>("home");
   const [initialPrompt, setInitialPrompt] = useState<string | undefined>();
   const [chatResetVersion, setChatResetVersion] = useState(0);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const [avaUnreadCount, setAvaUnreadCount] = useState(0);
   const [pushRegistration, setPushRegistration] = useState<PushRegistrationState>({
     status: "idle",
@@ -146,17 +149,6 @@ function AppContent() {
 
   const handleAvaUnreadCountChange = useCallback((count: number) => {
     setAvaUnreadCount(count);
-  }, []);
-
-
-  useEffect(() => {
-    const showSubscription = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
-    const hideSubscription = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
   }, []);
 
   if (!authReady) {

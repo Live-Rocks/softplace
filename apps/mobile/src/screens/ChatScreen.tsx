@@ -8,7 +8,6 @@ import {
   FlatList,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
@@ -17,6 +16,7 @@ import {
   TextInput,
   View
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import type { AiProvider, ChatRequest } from "@softplace/shared";
 import { api } from "../api/client";
 import { SoftButton } from "../components/SoftButton";
@@ -205,7 +205,8 @@ export function ChatScreen({
   return (
     <KeyboardAvoidingView
       style={styles.wrap}
-      behavior="padding"
+      behavior="translate-with-padding"
+      enabled={active}
       keyboardVerticalOffset={0}
     >
       <View style={styles.fixedHeader}>

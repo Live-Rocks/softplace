@@ -4,13 +4,13 @@ import {
   ActivityIndicator,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   View
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import type { AvaMessage, AvaState } from "@softplace/shared";
 import { api } from "../api/client";
 import { SoftButton } from "../components/SoftButton";
@@ -108,7 +108,12 @@ export function AvaScreen({ accessToken, active, onUnreadCountChange }: Props) {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.wrap} behavior="padding">
+    <KeyboardAvoidingView
+      style={styles.wrap}
+      behavior="translate-with-padding"
+      enabled={active}
+      keyboardVerticalOffset={0}
+    >
       <View style={styles.header}>
         <View style={styles.avatar}><Text style={styles.avatarText}>A</Text></View>
         <View style={styles.headerCopy}>
