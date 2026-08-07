@@ -162,7 +162,11 @@ export function LoginScreen() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboardWrap}>
-      <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.wrap}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <HeartHandshake size={34} color={colors.accent} />
           <Text style={styles.title}>SoftPlace</Text>
@@ -279,8 +283,10 @@ const styles = StyleSheet.create({
   wrap: {
     flexGrow: 1,
     backgroundColor: colors.bg,
-    justifyContent: "center",
-    padding: 24
+    justifyContent: "flex-start",
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 32
   },
   header: {
     gap: 10,
