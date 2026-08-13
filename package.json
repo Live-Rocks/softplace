@@ -13,6 +13,10 @@
     "build:server": "npm --workspace apps/server run build",
     "start:server": "npm --workspace apps/server run start",
     "test": "npm --workspace apps/server run test",
+    "eval:retrieval": "npm --workspace apps/server run eval:retrieval --",
+    "retrieval:shadow:backfill": "npm --workspace apps/server run retrieval:shadow:backfill --",
+    "retrieval:shadow:review": "npm --workspace apps/server run retrieval:shadow:review --",
+    "retrieval:shadow:report": "npm --workspace apps/server run retrieval:shadow:report --",
     "typecheck": "npm --workspace apps/server run typecheck && npm --workspace apps/mobile run typecheck"
   },
   "engines": {

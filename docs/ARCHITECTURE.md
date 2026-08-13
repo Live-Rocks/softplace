@@ -145,6 +145,8 @@ Server 已有 Expo push sender、push token API 與資料表，但 Mobile 尚未
 
 Ava：`companion_definitions`、`ava_event_runs`、`companion_daily_states`、`user_companions`、`companion_messages`、`companion_memories`、`companion_jobs`、`companion_daily_usage`、`push_tokens`。
 
+Retrieval Shadow：`retrieval_chunks`、`retrieval_shadow_jobs`、`retrieval_shadow_runs`、`retrieval_shadow_candidates`。只允許 service-role；chunks 保存向量與 message ID，不重複保存聊天全文。每分鐘 worker 非同步搜尋，結果不進 prompt 或 Mobile API。
+
 一般使用者可透過 RLS 讀取自己的核心資料；實際 App 寫入主要由 server 使用 service-role 完成。成本保護與 Ava 資料表不開放 anon／authenticated 直接存取，只允許 service-role 與受控 RPC。
 
 ## 模型與上下文

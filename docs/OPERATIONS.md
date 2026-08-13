@@ -39,6 +39,8 @@
 | `CHAT_RATE_LIMIT_PER_MINUTE` | 每帳號分鐘限制，預設 `12` | Server 設定 |
 | `CHAT_RATE_LIMIT_PER_HOUR` | 每帳號小時限制，預設 `120` | Server 設定 |
 | `DEEP_RESERVATION_TTL_SECONDS` | 深度 reservation TTL，預設 `120` | Server 設定 |
+| `RETRIEVAL_SHADOW_ENABLED` | Retrieval Shadow mode 開關，預設 `false` | Server 設定 |
+| `RETRIEVAL_SHADOW_USER_IDS` | 逗號分隔 UUID allowlist；空值代表無人啟用 | 秘密／個資 |
 | `AVA_FEATURE_ENABLED` | Ava 全域開關，預設 `false` | Server 設定 |
 | `AVA_BETA_USER_IDS` | 逗號分隔 allowlist；空值代表所有已登入帳號 | 秘密／個資 |
 | `AVA_DAILY_LIMIT` | 每帳號 Ava 每日生成上限，預設 `30` | Server 設定 |
@@ -60,6 +62,7 @@
 8. `008_ava_global_event_foundation.sql`：Ava 全域 2～3 天事件 run 與每日 phase 骨架；尚未改變 prompt。
 9. `009_ava_event_daily_details.sql`：Ava 每日全域事件細節、原子 lease 與 30 分鐘失敗重試。
 10. `010_message_sequence.sql`：安放訊息對話內流水號、原子分配 trigger 與可靠分頁排序。
+11. `011_retrieval_shadow.sql`：pgvector、512 維 dialogue-window chunks、shadow jobs/runs/candidates、RLS 與受控 RPC。
 
 已執行的 migration 不回頭改寫；修正以新編號追加。執行前先讀 SQL，執行後保存結果並跑對應 smoke test。
 
@@ -150,6 +153,38 @@ Supabase 啟用 Cron、`pg_net` 與 Vault。Cron job：
 - Timeout：`90000 ms`
 
 檢查順序：Cron run status → `net._http_response` 的 `status_code/content` → Zeabur logs → `companion_jobs` 的 `status/due_at/last_error` → `companion_daily_usage`。
+
+## Retrieval Shadow Mode
+
+Shadow mode 只對 `RETRIEVAL_SHADOW_USER_IDS` allowlist 生效。合格文字會再次送到 OpenAI Embeddings API，固定使用 `text-embedding-3-small` 512 維；搜尋結果不會送進聊天生成模型或 Mobile API。正式 log 只能出現固定錯誤碼、ID、計數與耗時，不得出現聊天全文。
+
+部署順序：
+
+1. 套用 migration `011`，保持 `RETRIEVAL_SHADOW_ENABLED=false`。
+2. Zeabur 設定 `RETRIEVAL_SHADOW_USER_IDS=<測試 UUID>`，確認 `COMPANION_WORKER_SECRET` 存在。
+3. 先執行 dry-run，不會產生 embeddings：
+
+```bash
+npm run retrieval:shadow:backfill -- --user-id=<uuid>
+```
+
+4. 確認合格／跳過數量後才加 `--confirm`；此步會產生少量 OpenAI 費用：
+
+```bash
+npm run retrieval:shadow:backfill -- --user-id=<uuid> --confirm
+```
+
+5. 設定 `RETRIEVAL_SHADOW_ENABLED=true` 並重啟 server，手動呼叫一次 `/internal/companion/tick`。回應中的 `retrieval.claimed/completed/failed` 與 Ava 統計互相獨立。
+6. 送一則 allowlist 純文字聊天，確認正常回覆沒有 retrieval 欄位；下一次 tick 後檢查 run 與 Top 5 candidates。圖片與危機訊息不得建立 job。
+
+人工檢閱與脫敏報告：
+
+```bash
+npm run retrieval:shadow:review -- --user-id=<uuid> --limit=25
+npm run retrieval:shadow:report
+```
+
+Review 指令會在本機終端臨時顯示原始 query 與候選 anchor，不會寫出含全文檔案。Report 只輸出彙總數據至 gitignored `artifacts/retrieval-shadow/`。Phase 1 至少需要 50 個 completed runs 與 25 個完整 reviewed runs；shadow run/candidate 和已結束 job 保留 90 天，chunk 隨對話刪除。
 
 ## Expo Go 與未來 Preview APK
 

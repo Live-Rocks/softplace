@@ -268,7 +268,7 @@ export function createMemoryRepository(initialProfiles: AuthUser[] = []): Reposi
       messages.set(assistantMessage.id, assistantMessage);
       conversation.updatedAt = now();
 
-      return { assistantMessage, usage };
+      return { userMessage, assistantMessage, usage };
     }
   };
 }
@@ -530,6 +530,18 @@ function createSupabaseRepository(): Repository {
       if (error) throw error;
       const row = data as any;
       return {
+        userMessage: {
+        id: row.user_message_id,
+          conversationId: row.user_conversation_id,
+          sequence: Number(row.user_message_sequence),
+          role: row.user_role,
+          content: row.user_content,
+          modelUsed: null,
+          mode: null,
+          imagePresent: row.user_image_present,
+          crisisDetected: row.user_crisis_detected,
+          createdAt: row.user_created_at
+        },
         assistantMessage: {
           id: row.assistant_id,
           conversationId: row.assistant_conversation_id,

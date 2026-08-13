@@ -14,6 +14,7 @@ import {
   type GeneratedCompanionReply
 } from "../integrations/openai.js";
 import type { Repository } from "../types.js";
+import { enqueueRetrievalShadowJob, retrievalShadowEnabledFor } from "../integrations/retrievalShadow.js";
 
 const chatSchema = z.object({
   message: z.string().trim().min(1).max(4000),
@@ -24,8 +25,13 @@ const chatSchema = z.object({
 });
 
 type ReplyGenerator = (input: GenerateCompanionReplyInput) => Promise<GeneratedCompanionReply>;
+type ShadowEnqueuer = (userId: string, conversationId: string, queryMessageId: string) => Promise<unknown>;
 
-export function chatRouter(repository: Repository, generateReply: ReplyGenerator = generateCompanionReply) {
+export function chatRouter(
+  repository: Repository,
+  generateReply: ReplyGenerator = generateCompanionReply,
+  enqueueShadow: ShadowEnqueuer = enqueueRetrievalShadowJob
+) {
   const router = Router();
 
   router.post("/", async (req, res, next) => {
@@ -174,6 +180,12 @@ export function chatRouter(repository: Repository, generateReply: ReplyGenerator
         imageAccepted: hasImage,
         quotaNotice
       };
+
+      if (!hasImage && retrievalShadowEnabledFor(user.id)) {
+        enqueueShadow(user.id, conversation.id, completed.userMessage.id).catch(() => {
+          console.warn("[retrieval-shadow:enqueue]", { code: "shadow_enqueue_failed" });
+        });
+      }
 
       return res.json(response);
     } catch (error) {
