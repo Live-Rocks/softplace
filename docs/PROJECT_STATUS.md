@@ -1,6 +1,6 @@
 # SoftPlace 專案狀態
 
-最後核對：`2026-08-07`
+最後核對：`2026-08-13`
 
 基準 commit：`d81c674`
 
@@ -46,6 +46,8 @@
 - **程式已驗證**：每分鐘／每小時限流、深度 reservation、成功才扣額度、timeout 與失敗釋放。
 - **程式已驗證**：危機語句在一般限流與 OpenAI 前攔截，回覆台灣真人資源。
 - **已實作待驗證**：新安放訊息由對話內流水號排序，避免 user／assistant 同時間戳在重開 App 後倒置。migration `010` 已部署；既有歷史不回填，清除後的新時間線仍待實機重開 App 驗收。
+- **程式已驗證**：Retrieval Phase 0 complete。40 題全虛構繁中資料比較事件摘要、user-only、完整對話窗口與三組 embedding 規格；首選候選為 `text-embedding-3-small` 512 維＋最近 user context＋`dialogue_window`。離線診斷 threshold `0.60` 的 Recall@3 為 `59.4%`、Forbidden 與 Sensitive/Crisis hit 均為 `0%`、abstention 為 `100%`；threshold 尚未成為 production 決策。
+- **已實作待部署驗證**：Retrieval Phase 1 Shadow mode 已具備 allowlist、非同步 worker、pgvector migration、受控回填、人工標註與脫敏報告；結果不進 prompt。尚未套用 staging migration、啟用測試 UUID 或累積 50 runs／25 reviewed，因此 Phase 1 尚未完成。
 
 ### Ava beta
 
@@ -78,6 +80,8 @@
 5. 在少量封測前補齊監控、錯誤可讀性、資料刪除與隱私說明。
 
 ## 延後項目
+
+Retrieval Phase 0 已完成；Phase 1 Shadow mode 程式已實作但尚未在 staging 啟用或完成樣本門檻。Retrieval 結果仍未連接正式聊天 prompt，因此 production RAG 仍屬延後項目。
 
 - 正式付款、訂閱與方案升降級。
 - Google／Apple 等第三方登入。

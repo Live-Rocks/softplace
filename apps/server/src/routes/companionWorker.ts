@@ -19,6 +19,11 @@ import {
 import type { AvaDailyState } from "../integrations/avaRepository.js";
 import { sendAvaPush } from "../integrations/expoPush.js";
 import { generateAvaEventDetail, generateAvaReply } from "../integrations/openai.js";
+import {
+  createShadowEmbeddingProvider,
+  createSupabaseShadowStore,
+  processRetrievalShadowJobs
+} from "../integrations/retrievalShadow.js";
 
 export function companionWorkerRouter() {
   const router = Router();
@@ -28,7 +33,18 @@ export function companionWorkerRouter() {
       if (!config.companionWorkerSecret || secret !== config.companionWorkerSecret) {
         return res.status(401).json({ error: "Invalid worker secret", code: "unauthorized" });
       }
-      if (!config.avaFeatureEnabled) return res.json({ scheduled: 0, claimed: 0, completed: 0 });
+      let retrieval = { claimed: 0, completed: 0, failed: 0 };
+      if (config.retrievalShadowEnabled) {
+        const store = createSupabaseShadowStore();
+        if (store) {
+          retrieval = await processRetrievalShadowJobs({ store, provider: createShadowEmbeddingProvider() })
+            .catch(() => {
+              console.warn("[retrieval-shadow:worker]", { code: "shadow_worker_failed" });
+              return { claimed: 0, completed: 0, failed: 1 };
+            });
+        }
+      }
+      if (!config.avaFeatureEnabled) return res.json({ scheduled: 0, claimed: 0, completed: 0, retrieval });
 
       await ensureAvaDailyState();
       const scheduled = await scheduleEligibleProactiveJobs();
@@ -104,7 +120,7 @@ export function companionWorkerRouter() {
         }
       }
 
-      return res.json({ scheduled, claimed: jobs.length, completed });
+      return res.json({ scheduled, claimed: jobs.length, completed, retrieval });
     } catch (error) {
       return next(error);
     }

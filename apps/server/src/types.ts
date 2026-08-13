@@ -52,6 +52,7 @@ export type CompleteChatSuccessInput = {
 };
 
 export type CompleteChatSuccessResult = {
+  userMessage: Message;
   assistantMessage: Message;
   usage: UsageState;
 };

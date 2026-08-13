@@ -21,7 +21,8 @@ const testUser = {
 async function withTestServer(
   generateReply: (input: GenerateCompanionReplyInput) => Promise<{ content: string; provider: "openai" | "local" }>,
   run: (baseUrl: string, repository: ReturnType<typeof createMemoryRepository>) => Promise<void>,
-  repository: Repository = createMemoryRepository([testUser])
+  repository: Repository = createMemoryRepository([testUser]),
+  enqueueShadow: (userId: string, conversationId: string, queryMessageId: string) => Promise<unknown> = async () => null
 ) {
   await repository.getOrCreateProfile(testUser);
   const app = express();
@@ -30,7 +31,7 @@ async function withTestServer(
     req.user = testUser;
     next();
   });
-  app.use("/api/chat", chatRouter(repository, generateReply));
+  app.use("/api/chat", chatRouter(repository, generateReply, enqueueShadow));
   app.use((_error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     res.status(500).json({ error: "test error", code: "internal_error" });
   });
@@ -434,6 +435,85 @@ test("hourly rate limits are isolated by user", async () => {
     ).allowed,
     true
   );
+});
+
+test("shadow mode enqueues only successful allowlisted text without changing generation input", async () => {
+  const originalEnabled = config.retrievalShadowEnabled;
+  const originalIds = new Set(config.retrievalShadowUserIds);
+  config.retrievalShadowEnabled = true;
+  config.retrievalShadowUserIds.clear();
+  config.retrievalShadowUserIds.add(testUser.id);
+  const calls: Array<{ userId: string; conversationId: string; queryMessageId: string }> = [];
+  const generatedInputs: GenerateCompanionReplyInput[] = [];
+  try {
+    await withTestServer(
+      async (input) => {
+        generatedInputs.push(input);
+        return { content: "我在。", provider: "openai" };
+      },
+      async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: "今天又發生了", requestedMode: "light" })
+        });
+        assert.equal(response.status, 200);
+        const imageResponse = await fetch(`${baseUrl}/api/chat`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: "看看這張圖", imageBase64: "AA==", imageMimeType: "image/png" })
+        });
+        assert.equal(imageResponse.status, 200);
+        const crisisResponse = await fetch(`${baseUrl}/api/chat`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: "我想自殺" })
+        });
+        assert.equal(crisisResponse.status, 200);
+      },
+      createMemoryRepository([testUser]),
+      async (userId, conversationId, queryMessageId) => { calls.push({ userId, conversationId, queryMessageId }); }
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.userId, testUser.id);
+    assert.equal(generatedInputs.length, 2);
+    assert.doesNotMatch(JSON.stringify(generatedInputs), /retrieval|shadow|chunk|score/i);
+  } finally {
+    config.retrievalShadowEnabled = originalEnabled;
+    config.retrievalShadowUserIds.clear();
+    for (const id of originalIds) config.retrievalShadowUserIds.add(id);
+  }
+});
+
+test("shadow enqueue failure is redacted and never changes a successful chat response", async () => {
+  const originalEnabled = config.retrievalShadowEnabled;
+  const originalIds = new Set(config.retrievalShadowUserIds);
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  config.retrievalShadowEnabled = true;
+  config.retrievalShadowUserIds.clear();
+  config.retrievalShadowUserIds.add(testUser.id);
+  console.warn = (...values: unknown[]) => { warnings.push(values); };
+  try {
+    await withTestServer(
+      async () => ({ content: "正常回覆。", provider: "openai" }),
+      async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: "一般訊息" })
+        });
+        assert.equal(response.status, 200);
+        assert.equal(((await response.json()) as any).assistantMessage.content, "正常回覆。");
+        await new Promise((resolve) => setImmediate(resolve));
+      },
+      createMemoryRepository([testUser]),
+      async () => { throw new Error("private database payload"); }
+    );
+    assert.match(JSON.stringify(warnings), /shadow_enqueue_failed/);
+    assert.doesNotMatch(JSON.stringify(warnings), /private database payload/);
+  } finally {
+    console.warn = originalWarn;
+    config.retrievalShadowEnabled = originalEnabled;
+    config.retrievalShadowUserIds.clear();
+    for (const id of originalIds) config.retrievalShadowUserIds.add(id);
+  }
 });
 
 test("new repository profiles default to free without changing existing plans", async () => {

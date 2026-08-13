@@ -67,6 +67,24 @@ npm test
 npm run build:server
 ```
 
+Retrieval／RAG 的虛構繁中離線評估需另外手動執行，不會進入一般測試或正式聊天：
+
+```bash
+npm run eval:retrieval
+```
+
+資料集、指標與 CLI 選項見 [Retrieval 離線評估](docs/RETRIEVAL_EVAL.md)。
+
+Retrieval Shadow mode 的回填、人工檢閱與脫敏報告為管理指令，預設 feature flag 關閉：
+
+```bash
+npm run retrieval:shadow:backfill -- --user-id=<uuid>
+npm run retrieval:shadow:review -- --user-id=<uuid> --limit=25
+npm run retrieval:shadow:report
+```
+
+部署與隱私邊界見 [Operations](docs/OPERATIONS.md#retrieval-shadow-mode)。
+
 Production server：
 
 ```bash
