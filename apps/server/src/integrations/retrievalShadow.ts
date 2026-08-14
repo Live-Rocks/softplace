@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import OpenAI from "openai";
 import type { Message } from "@softplace/shared";
 import { config } from "../config.js";
-import { RETRIEVAL_SHADOW, buildShadowDialogueWindow, buildShadowQuery } from "../domain/retrievalShadow.js";
+import { RETRIEVAL_SHADOW, buildShadowDialogueWindow, buildShadowQueryParts } from "../domain/retrievalShadow.js";
 import { supabaseAdmin } from "./supabase.js";
 
 export type RetrievalShadowJob = {
@@ -19,7 +19,7 @@ export type RetrievalShadowCandidate = { chunkId: string; score: number };
 export type RetrievalShadowStore = {
   claimJobs(token: string, limit: number): Promise<RetrievalShadowJob[]>;
   getMessages(job: RetrievalShadowJob): Promise<Message[]>;
-  match(job: RetrievalShadowJob, querySequence: number, embedding: number[]): Promise<RetrievalShadowCandidate[]>;
+  match(job: RetrievalShadowJob, beforeSequence: number, embedding: number[]): Promise<RetrievalShadowCandidate[]>;
   complete(job: RetrievalShadowJob, token: string, queueDelayMs: number, searchLatencyMs: number, candidates: RetrievalShadowCandidate[]): Promise<void>;
   retry(jobId: string, token: string, errorCode: string): Promise<void>;
   upsertChunk(job: RetrievalShadowJob, startSequence: number, endSequence: number, embedding: number[]): Promise<void>;
@@ -87,11 +87,11 @@ export function createSupabaseShadowStore(): RetrievalShadowStore | null {
       if (error) throw new Error("shadow_context_failed");
       return (data ?? []).map(mapMessage);
     },
-    async match(job, querySequence, embedding) {
+    async match(job, beforeSequence, embedding) {
       const started = performance.now();
       const { data, error } = await db.rpc("match_retrieval_shadow_chunks", {
         p_user_id: job.userId, p_conversation_id: job.conversationId,
-        p_query_sequence: querySequence, p_query_embedding: vector(embedding), p_limit: RETRIEVAL_SHADOW.candidateLimit
+        p_query_sequence: beforeSequence, p_query_embedding: vector(embedding), p_limit: RETRIEVAL_SHADOW.candidateLimit
       });
       void started;
       if (error) throw new Error("shadow_search_failed");
@@ -141,14 +141,13 @@ export async function processRetrievalShadowJobs(input: {
     try {
       const processingStarted = now();
       const messages = await input.store.getMessages(job);
-      const queryMessage = messages.find((message) => message.id === job.queryMessageId)!;
-      const queryText = buildShadowQuery(messages, job.queryMessageId);
+      const query = buildShadowQueryParts(messages, job.queryMessageId);
       const window = buildShadowDialogueWindow(messages, job.queryMessageId);
-      const texts = window ? [queryText, window.text] : [queryText];
+      const texts = window ? [query.text, window.text] : [query.text];
       const [queryEmbedding, chunkEmbedding] = await input.provider.embed(texts);
       if (!queryEmbedding) throw new Error("shadow_embedding_invalid");
       const searchStarted = now();
-      const candidates = await input.store.match(job, queryMessage.sequence, queryEmbedding);
+      const candidates = await input.store.match(job, query.searchBeforeSequence, queryEmbedding);
       const searchLatencyMs = Math.max(0, now() - searchStarted);
       if (window && chunkEmbedding) {
         await input.store.upsertChunk(job, window.startSequence, window.endSequence, chunkEmbedding);

@@ -184,7 +184,9 @@ npm run retrieval:shadow:review -- --user-id=<uuid> --limit=25
 npm run retrieval:shadow:report
 ```
 
-Review 指令會在本機終端臨時顯示原始 query 與候選 anchor，不會寫出含全文檔案。Report 只輸出彙總數據至 gitignored `artifacts/retrieval-shadow/`。Phase 1 至少需要 50 個 completed runs 與 25 個完整 reviewed runs；shadow run/candidate 和已結束 job 保留 90 天，chunk 隨對話刪除。
+Review 指令會在本機終端臨時顯示實際 embedding 使用的最近兩則 user context、current query、Top 5 候選與 threshold 狀態，不會寫出含全文檔案。`--limit` 代表本次要新完成的 runs 數量；工具會分頁跳過已完整標註的 runs，並接續 partial run 尚未標註的 candidates。
+
+Report 只輸出彙總數據至 gitignored `artifacts/retrieval-shadow/`。Phase 1 至少需要 50 個 completed runs 與 25 個完整 reviewed runs；shadow run/candidate 和已結束 job 保留 90 天，chunk 隨對話刪除。Phase 1.5 起，搜尋只接受結束於最早一則實際 recent user context 之前的 chunks，避免把 query 已帶入的最近對話重複召回；沒有合格 recent context 時才以 current query sequence 為上界。
 
 ## Expo Go 與未來 Preview APK
 

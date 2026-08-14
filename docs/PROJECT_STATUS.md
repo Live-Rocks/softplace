@@ -47,7 +47,8 @@
 - **程式已驗證**：危機語句在一般限流與 OpenAI 前攔截，回覆台灣真人資源。
 - **已實作待驗證**：新安放訊息由對話內流水號排序，避免 user／assistant 同時間戳在重開 App 後倒置。migration `010` 已部署；既有歷史不回填，清除後的新時間線仍待實機重開 App 驗收。
 - **程式已驗證**：Retrieval Phase 0 complete。40 題全虛構繁中資料比較事件摘要、user-only、完整對話窗口與三組 embedding 規格；首選候選為 `text-embedding-3-small` 512 維＋最近 user context＋`dialogue_window`。離線診斷 threshold `0.60` 的 Recall@3 為 `59.4%`、Forbidden 與 Sensitive/Crisis hit 均為 `0%`、abstention 為 `100%`；threshold 尚未成為 production 決策。
-- **已實作待部署驗證**：Retrieval Phase 1 Shadow mode 已具備 allowlist、非同步 worker、pgvector migration、受控回填、人工標註與脫敏報告；結果不進 prompt。尚未套用 staging migration、啟用測試 UUID 或累積 50 runs／25 reviewed，因此 Phase 1 尚未完成。
+- **使用者實測完成**：Retrieval Phase 1 Shadow mode 已在 allowlist 帳號累積 53 completed runs、0 errors，人工完整檢閱 25 runs／125 candidates。Threshold `0.60` 的 selected precision 為 `82.6%`、query useful-hit 為 `52%`；queue P50／P95 為 `35／58 秒`，search P50／P95 為 `137／203 ms`。本批沒有人工 forbidden 樣本，因此不可推論敏感風險已充分驗證；結果仍不進 prompt。
+- **程式已驗證待部署**：Phase 1.5 Review 顯示完整 query context 並採真正分頁；Shadow 搜尋排除與 recent context 重疊的 chunks。既有 53／25 v1 基線不重算，修正只影響部署後的新 runs。
 
 ### Ava beta
 
@@ -81,7 +82,7 @@
 
 ## 延後項目
 
-Retrieval Phase 0 已完成；Phase 1 Shadow mode 程式已實作但尚未在 staging 啟用或完成樣本門檻。Retrieval 結果仍未連接正式聊天 prompt，因此 production RAG 仍屬延後項目。
+Retrieval Phase 0 與 Phase 1 Shadow 基線均已完成；Phase 1.5 排除 recent-context 重疊並修正人工檢閱分頁。Retrieval 結果仍未連接正式聊天 prompt，因此 production RAG 仍屬延後項目。
 
 - 正式付款、訂閱與方案升降級。
 - Google／Apple 等第三方登入。
