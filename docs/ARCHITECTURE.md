@@ -60,7 +60,7 @@ sequenceDiagram
         opt 需要深度額度
             S->>DB: reserve_deep_usage
         end
-        S->>DB: 依對話流水號讀最近 20 則＋已確認記憶
+        S->>DB: 依對話流水號讀最近 10 則＋已確認記憶
         S->>O: instructions、history、user input、可選圖片
         O-->>S: assistant output
         S->>DB: complete_chat_success 原子保存、分配訊息順序與扣款
@@ -147,14 +147,16 @@ Ava：`companion_definitions`、`ava_event_runs`、`companion_daily_states`、`u
 
 Retrieval Shadow：`retrieval_chunks`、`retrieval_shadow_jobs`、`retrieval_shadow_runs`、`retrieval_shadow_candidates`。只允許 service-role；chunks 保存向量與 message ID，不重複保存聊天全文。每分鐘 worker 非同步搜尋，結果不進 prompt 或 Mobile API。
 
+Retrieval Generation Canary：`retrieval_generation_runs`、`retrieval_generation_candidates`。只允許 service-role；Deep allowlist 在生成前同步搜尋 Top 5，最多將兩個通過 `0.60` 的候選以 user-only 形式送入 prompt。觀測表只保存 ID、分數、延遲、token 與人工標籤，30 天後清除。
+
 一般使用者可透過 RLS 讀取自己的核心資料；實際 App 寫入主要由 server 使用 service-role 完成。成本保護與 Ava 資料表不開放 anon／authenticated 直接存取，只允許 service-role 與受控 RPC。
 
 ## 模型與上下文
 
 | 路徑 | 預設模型 | 上下文 |
 | --- | --- | --- |
-| 安放 light | `gpt-4o-mini` | 最近 20 則＋確認記憶＋light prompt |
-| 安放 deep | `gpt-5.4-mini` | 最近 20 則＋確認記憶＋deep prompt |
+| 安放 light | `gpt-4o-mini` | 最近 10 則＋確認記憶＋light prompt |
+| 安放 deep | `gpt-5.4-mini` | 最近 10 則＋確認記憶；allowlist 可加最多 2 個 user-only retrieval candidates＋deep prompt |
 | 安放圖片 | deep model | 同上，加單張壓縮圖片 |
 | Ava | `gpt-5.4-mini` | Worker 取得的近期訊息、關係、低敏感記憶與生活情境 |
 

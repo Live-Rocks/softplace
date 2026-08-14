@@ -81,6 +81,8 @@ Retrieval Shadow mode 的回填、人工檢閱與脫敏報告為管理指令，�
 npm run retrieval:shadow:backfill -- --user-id=<uuid>
 npm run retrieval:shadow:review -- --user-id=<uuid> --limit=25
 npm run retrieval:shadow:report
+npm run retrieval:generation:review -- --user-id=<uuid> --limit=25
+npm run retrieval:generation:report
 ```
 
 部署與隱私邊界見 [Operations](docs/OPERATIONS.md#retrieval-shadow-mode)。
@@ -99,7 +101,7 @@ curl https://softplace.zeabur.app/health
 - 安放深度模式：`gpt-5.4-mini`
 - Ava：`gpt-5.4-mini`
 
-模型名稱由 server 環境變數控制。OpenAI Responses 預設 `store:false`；安放每次只送最近 20 則訊息與已確認記憶。
+模型名稱由 server 環境變數控制。OpenAI Responses 預設 `store:false`；安放每次只送最近 10 則訊息與已確認記憶。Deep allowlist 可另外加入受控的舊對話 retrieval。
 
 ## 文件索引
 

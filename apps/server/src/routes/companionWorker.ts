@@ -24,6 +24,7 @@ import {
   createSupabaseShadowStore,
   processRetrievalShadowJobs
 } from "../integrations/retrievalShadow.js";
+import { cleanupGenerationRuns } from "../integrations/retrievalGeneration.js";
 
 export function companionWorkerRouter() {
   const router = Router();
@@ -43,6 +44,9 @@ export function companionWorkerRouter() {
               return { claimed: 0, completed: 0, failed: 1 };
             });
         }
+        await cleanupGenerationRuns().catch(() => {
+          console.warn("[retrieval-generation:cleanup]", { code: "generation_cleanup_failed" });
+        });
       }
       if (!config.avaFeatureEnabled) return res.json({ scheduled: 0, claimed: 0, completed: 0, retrieval });
 

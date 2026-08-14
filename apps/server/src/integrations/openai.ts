@@ -19,6 +19,7 @@ export type GenerateCompanionReplyInput = {
   instructions: string;
   history: Message[];
   userMessage: string;
+  retrievalContext?: string;
   imageBase64?: string;
   imageMimeType?: string;
 };
@@ -26,6 +27,11 @@ export type GenerateCompanionReplyInput = {
 export type GeneratedCompanionReply = {
   content: string;
   provider: AiProvider;
+  usage?: {
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+  };
 };
 
 export class CompanionProviderError extends Error {
@@ -70,6 +76,9 @@ export async function generateCompanionReply(input: GenerateCompanionReplyInput)
       instructions: input.instructions,
       input: [
         ...recentMessages,
+        ...(input.retrievalContext
+          ? [{ role: "user" as const, content: [{ type: "input_text", text: input.retrievalContext }] }]
+          : []),
         {
           role: "user",
           content: userContent
@@ -115,7 +124,12 @@ export async function generateCompanionReply(input: GenerateCompanionReplyInput)
 
     return {
       content: response.output_text?.trim() || "我在，先陪你停一下。你可以再多跟我說一點點。",
-      provider: "openai"
+      provider: "openai",
+      usage: response.usage ? {
+        inputTokens: response.usage.input_tokens,
+        cachedInputTokens: response.usage.input_tokens_details.cached_tokens,
+        outputTokens: response.usage.output_tokens
+      } : undefined
     };
   } catch (error) {
     if (error instanceof APIConnectionTimeoutError) {
@@ -181,7 +195,7 @@ export async function generateAvaEventDetail(input: {
 }
 
 export function buildRecentMessages(history: Message[]) {
-  return history.slice(-20).map((message) => ({
+  return history.slice(-10).map((message) => ({
     role: message.role === "assistant" ? ("assistant" as const) : ("user" as const),
     content: message.content
   }));

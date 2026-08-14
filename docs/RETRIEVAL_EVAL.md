@@ -82,6 +82,15 @@ artifacts/retrieval-eval/reports/<timestamp>/report.md
 
 完整 v1 JSON／Markdown 報告保留在 gitignored `artifacts/retrieval-shadow/2026-08-14T08-17-10-107Z/`，不進版控。Phase 1.5 起，搜尋會排除與實際 recent user context 時間範圍重疊的 chunks；v1 基線不重算、不覆寫，也不和修正後的新 runs 直接混合比較。
 
+## Phase 2 Deep Generation Canary
+
+- 所有安放生成只使用最近 10 則；Deep allowlist 才同步執行 generation retrieval。
+- 搜尋 Top 5、threshold `0.60`，排除最近 10 則時間範圍與候選重疊後，最多注入 2 個 chunks。
+- Embedding／搜尋使用 `dialogue_window`；實際 prompt 只放歷史 user 原話，不放舊 assistant 回覆，整段最多 1,200 tokens。
+- Retrieval 最多等待 2 秒；錯誤、逾時與無合格候選都以最近 10 則正常生成。Shadow pipeline 繼續運作。
+- 只記錄 ID、rank、score、是否注入、延遲、token 與人工標籤；Mobile API 與一般 log 不含候選或全文。
+- 完成 25 個 injected runs 的候選＋回覆雙層檢閱後，要求 helpful 至少 50%，且 harmful、stale、sensitive、injected forbidden 全為 0。Token 節省只報告、不作硬門檻。
+
 ## 修改資料集
 
 新增或修改案例後先執行：

@@ -105,3 +105,11 @@
 - 背景：SoftPlace 的實際功能是一般情緒陪伴，原本的年齡確認會造成不必要的限制，也容易讓使用者對內容性質產生錯誤期待。
 - 決定：移除登入頁的年齡確認與相關文案，Email OTP 登入只需有效 Email；產品仍保留心理治療、診斷與危機救援的既有邊界。
 - 影響：產品定位與實際內容一致，更多使用者可以進入；未來設計文案與功能時，不以年齡限制取代清楚的安全與資料控制說明。
+
+## ADR-014：最近 10 則作短期上下文，Deep Canary 以 RAG 補充舊脈絡
+
+- 日期：2026-08-14
+- 狀態：Accepted
+- 背景：最近 20 則能維持連續感，但加入 retrieval 後若仍完整保留會增加 token 與重複內容；Shadow 基線已證明部分較舊片段可被找回，但尚未證明直接注入的生成品質。
+- 決定：ADR-003 的模型上下文數量由 20 改為 10 則，Light 與 Deep 都適用。只有 Deep allowlist canary 在同步搜尋成功時，額外注入最多 2 個 threshold `0.60` 的 user-only 舊片段；搜尋仍使用 dialogue window。Generation 有獨立 kill switch，沿用 Shadow UUID allowlist。
+- 影響：短期上下文成本下降，Light／Deep 的上下文能力更明確分流；Deep 增加最多 2 秒 retrieval 等待與錯誤召回風險，因此必須 fail-open、保留人工雙層檢閱，且通過 25 個注入回覆前不得擴大。

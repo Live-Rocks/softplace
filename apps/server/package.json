@@ -12,9 +12,12 @@
     "eval:retrieval": "tsx src/evals/retrieval/runRetrievalEval.ts",
     "retrieval:shadow:backfill": "tsx src/scripts/retrievalShadowBackfill.ts",
     "retrieval:shadow:review": "tsx src/scripts/retrievalShadowReview.ts",
-    "retrieval:shadow:report": "tsx src/scripts/retrievalShadowReport.ts"
+    "retrieval:shadow:report": "tsx src/scripts/retrievalShadowReport.ts",
+    "retrieval:generation:review": "tsx src/scripts/retrievalGenerationReview.ts",
+    "retrieval:generation:report": "tsx src/scripts/retrievalGenerationReport.ts"
   },
   "dependencies": {
+    "@dqbd/tiktoken": "^1.0.22",
     "@softplace/shared": "file:../../packages/shared",
     "@supabase/supabase-js": "^2.45.0",
     "cors": "^2.8.5",

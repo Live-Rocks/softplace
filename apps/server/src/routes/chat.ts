@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ChatResponse } from "@softplace/shared";
 import { config } from "../config.js";
 import { buildCompanionInstructions } from "../domain/companionPrompt.js";
+import { RETRIEVAL_GENERATION, countTokens } from "../domain/retrievalGeneration.js";
 import { suggestMemoriesFromUserText } from "../domain/memory.js";
 import { assessCrisis, buildCrisisResponse } from "../domain/safety.js";
 import { decideCompanionMode } from "../domain/usage.js";
@@ -15,6 +16,14 @@ import {
 } from "../integrations/openai.js";
 import type { Repository } from "../types.js";
 import { enqueueRetrievalShadowJob, retrievalShadowEnabledFor } from "../integrations/retrievalShadow.js";
+import {
+  recordGenerationRun,
+  retrievalGenerationEnabledFor,
+  retrieveForGeneration,
+  type GenerationRetriever,
+  type GenerationRunRecorder,
+  type GenerationRetrievalResult
+} from "../integrations/retrievalGeneration.js";
 
 const chatSchema = z.object({
   message: z.string().trim().min(1).max(4000),
@@ -30,7 +39,9 @@ type ShadowEnqueuer = (userId: string, conversationId: string, queryMessageId: s
 export function chatRouter(
   repository: Repository,
   generateReply: ReplyGenerator = generateCompanionReply,
-  enqueueShadow: ShadowEnqueuer = enqueueRetrievalShadowJob
+  enqueueShadow: ShadowEnqueuer = enqueueRetrievalShadowJob,
+  retrieveGeneration: GenerationRetriever = retrieveForGeneration,
+  recordGeneration: GenerationRunRecorder = recordGenerationRun
 ) {
   const router = Router();
 
@@ -121,23 +132,52 @@ export function chatRouter(
       let conversation;
       let modelUsed;
       let generated: GeneratedCompanionReply;
+      let generationRetrieval: GenerationRetrievalResult | null = null;
+      let generationTokenMetrics: {
+        instructionsTokens: number;
+        memoryTokens: number;
+        history10Tokens: number;
+        history20Tokens: number;
+        currentQueryTokens: number;
+      } | null = null;
       try {
         conversation = await repository.getOrCreatePrimaryConversation(user.id);
         modelUsed = mode === "deep" ? config.openAiDeepModel : config.openAiLightModel;
-        const [memories, history] = await Promise.all([
+        const [memories, history20] = await Promise.all([
           repository.listMemories(user.id),
-          repository.listMessages(user.id, conversation.id, { limit: 20 })
+          repository.listMessages(user.id, conversation.id, { limit: RETRIEVAL_GENERATION.baselineHistoryLimit })
         ]);
+        const history = history20.slice(-RETRIEVAL_GENERATION.historyLimit);
+        if (mode === "deep" && !hasImage && retrievalGenerationEnabledFor(user.id)) {
+          generationRetrieval = await retrieveGeneration({
+            userId: user.id,
+            conversationId: conversation.id,
+            history,
+            currentQuery: body.message
+          }).catch(() => fallbackGenerationRetrieval());
+        }
+        const instructions = buildCompanionInstructions(memories, {
+          mode,
+          hasImage,
+          hasRetrievedContext: generationRetrieval?.status === "injected"
+        });
+        if (generationRetrieval) {
+          generationTokenMetrics = {
+            instructionsTokens: countTokens(instructions),
+            memoryTokens: countTokens(memories.map((memory) => memory.content).join("\n")),
+            history10Tokens: countMessageContentTokens(history),
+            history20Tokens: countMessageContentTokens(history20),
+            currentQueryTokens: countTokens(body.message)
+          };
+        }
         generated = await generateReply({
           userId: user.id,
           model: modelUsed,
           mode,
-          instructions: buildCompanionInstructions(memories, {
-            mode,
-            hasImage
-          }),
+          instructions,
           history,
           userMessage: body.message,
+          retrievalContext: generationRetrieval?.context ?? undefined,
           imageBase64: body.imageBase64,
           imageMimeType: body.imageMimeType
         });
@@ -181,6 +221,25 @@ export function chatRouter(
         quotaNotice
       };
 
+      if (generationRetrieval && generationTokenMetrics) {
+        void recordGeneration({
+          userId: user.id,
+          conversationId: conversation.id,
+          queryMessageId: completed.userMessage.id,
+          assistantMessageId: completed.assistantMessage.id,
+          model: modelUsed,
+          retrieval: generationRetrieval,
+          tokenMetrics: {
+            ...generationTokenMetrics,
+            actualInputTokens: generated.usage?.inputTokens ?? null,
+            cachedInputTokens: generated.usage?.cachedInputTokens ?? null,
+            outputTokens: generated.usage?.outputTokens ?? null
+          }
+        }).catch(() => {
+          console.warn("[retrieval-generation:observation]", { code: "generation_observation_write_failed" });
+        });
+      }
+
       if (!hasImage && retrievalShadowEnabledFor(user.id)) {
         enqueueShadow(user.id, conversation.id, completed.userMessage.id).catch(() => {
           console.warn("[retrieval-shadow:enqueue]", { code: "shadow_enqueue_failed" });
@@ -194,6 +253,23 @@ export function chatRouter(
   });
 
   return router;
+}
+
+function countMessageContentTokens(messages: Array<{ content: string }>) {
+  return countTokens(messages.map((message) => message.content).join("\n"));
+}
+
+function fallbackGenerationRetrieval(): GenerationRetrievalResult {
+  return {
+    status: "fallback",
+    context: null,
+    candidates: [],
+    embeddingLatencyMs: 0,
+    searchLatencyMs: 0,
+    totalLatencyMs: RETRIEVAL_GENERATION.timeoutMs,
+    retrievalTokens: 0,
+    errorCode: "generation_retrieval_failed"
+  };
 }
 
 async function releaseReservation(repository: Repository, userId: string, reservationId: string | null) {

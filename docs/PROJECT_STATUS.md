@@ -42,13 +42,14 @@
 - **使用者實機確認**：輕量／深度模型路由與模式差異。
 - **使用者實機確認**：單張圖片、圖片強制深度、送出後立即清除預覽。
 - **使用者實機確認**：記憶新增、修改、刪除、重開後載入與聊天注入；內容 1～300 字。
-- **程式已驗證**：最近 20 則上下文、確認記憶、圖片不落庫、provider 標示。
+- **程式已驗證**：最近 10 則上下文、確認記憶、圖片不落庫、provider 標示。
 - **程式已驗證**：每分鐘／每小時限流、深度 reservation、成功才扣額度、timeout 與失敗釋放。
 - **程式已驗證**：危機語句在一般限流與 OpenAI 前攔截，回覆台灣真人資源。
 - **已實作待驗證**：新安放訊息由對話內流水號排序，避免 user／assistant 同時間戳在重開 App 後倒置。migration `010` 已部署；既有歷史不回填，清除後的新時間線仍待實機重開 App 驗收。
 - **程式已驗證**：Retrieval Phase 0 complete。40 題全虛構繁中資料比較事件摘要、user-only、完整對話窗口與三組 embedding 規格；首選候選為 `text-embedding-3-small` 512 維＋最近 user context＋`dialogue_window`。離線診斷 threshold `0.60` 的 Recall@3 為 `59.4%`、Forbidden 與 Sensitive/Crisis hit 均為 `0%`、abstention 為 `100%`；threshold 尚未成為 production 決策。
 - **使用者實測完成**：Retrieval Phase 1 Shadow mode 已在 allowlist 帳號累積 53 completed runs、0 errors，人工完整檢閱 25 runs／125 candidates。Threshold `0.60` 的 selected precision 為 `82.6%`、query useful-hit 為 `52%`；queue P50／P95 為 `35／58 秒`，search P50／P95 為 `137／203 ms`。本批沒有人工 forbidden 樣本，因此不可推論敏感風險已充分驗證；結果仍不進 prompt。
-- **程式已驗證待部署**：Phase 1.5 Review 顯示完整 query context 並採真正分頁；Shadow 搜尋排除與 recent context 重疊的 chunks。既有 53／25 v1 基線不重算，修正只影響部署後的新 runs。
+- **使用者實測完成**：Retrieval Phase 1.5 已部署並完成 smoke test；新版 run 成功完成且無錯誤，5 個候選皆早於最早 recent user context 的搜尋上界，確認不再召回與 query context 重疊的 chunks。Review 顯示完整 query context 並採真正分頁；既有 53／25 v1 基線不重算，修正只影響部署後的新 runs，結果仍不進 prompt。
+- **已實作待部署**：Retrieval Phase 2 Deep allowlist canary。所有安放聊天改用最近 10 則；Deep allowlist 同步搜尋 Top 5、threshold `0.60`、最多注入 2 個 user-only 候選，受 1,200-token／2 秒上限與獨立 kill switch 保護。候選與最終回覆採雙層檢閱，目標為 25 個實際注入回覆；Mobile API 不暴露 retrieval metadata。
 
 ### Ava beta
 
@@ -74,20 +75,20 @@
 
 ## 近期優先順序
 
-1. 長時間實測 Ava 延遲回覆、主動訊息、未讀與跨日生活脈絡。
-2. 修正 leased reply job 補傳訊息競態，定義 Worker context snapshot 邊界。
-3. 讓 Ava 主動訊息安全地帶入有限近期脈絡，避免突然脫離對話。
-4. 持續觀察 Preview APK 的 Android push 到達率、點擊導頁與不同廠牌省電限制。
+1. 部署 Retrieval Phase 2 migration，以關閉 Generation flag 的狀態先驗證最近 10 則，再開啟單一 allowlist Deep canary。
+2. 完成 25 個注入回覆的候選＋回覆雙層人工檢閱，確認 helpful 至少 50% 且無 harmful／stale／sensitive／injected forbidden。
+3. 長時間實測 Ava 延遲回覆、主動訊息、未讀與跨日生活脈絡。
+4. 修正 leased reply job 補傳訊息競態，定義 Worker context snapshot 邊界。
 5. 在少量封測前補齊監控、錯誤可讀性、資料刪除與隱私說明。
 
 ## 延後項目
 
-Retrieval Phase 0 與 Phase 1 Shadow 基線均已完成；Phase 1.5 排除 recent-context 重疊並修正人工檢閱分頁。Retrieval 結果仍未連接正式聊天 prompt，因此 production RAG 仍屬延後項目。
+Retrieval Phase 0、Phase 1 Shadow 與 Phase 1.5 已完成；Phase 2 僅進入 Deep allowlist canary，尚未擴大為 production RAG。
 
 - 正式付款、訂閱與方案升降級。
 - Google／Apple 等第三方登入。
 - 公開上架與多地區危機資源。
-- 自動摘要、embedding、pgvector／RAG。
+- 自動摘要與全面 production RAG。
 - 語音輸入、語音回覆與即時通話。
 - 文字模擬寵物。
 - 多角色、角色市場或拆分成另一個 App。

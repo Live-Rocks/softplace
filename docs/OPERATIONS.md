@@ -41,6 +41,7 @@
 | `DEEP_RESERVATION_TTL_SECONDS` | 深度 reservation TTL，預設 `120` | Server 設定 |
 | `RETRIEVAL_SHADOW_ENABLED` | Retrieval Shadow mode 開關，預設 `false` | Server 設定 |
 | `RETRIEVAL_SHADOW_USER_IDS` | 逗號分隔 UUID allowlist；空值代表無人啟用 | 秘密／個資 |
+| `RETRIEVAL_GENERATION_ENABLED` | Deep RAG canary 獨立開關；預設 `false`，開啟時要求 Shadow 同時開啟 | Server 設定 |
 | `AVA_FEATURE_ENABLED` | Ava 全域開關，預設 `false` | Server 設定 |
 | `AVA_BETA_USER_IDS` | 逗號分隔 allowlist；空值代表所有已登入帳號 | 秘密／個資 |
 | `AVA_DAILY_LIMIT` | 每帳號 Ava 每日生成上限，預設 `30` | Server 設定 |
@@ -63,6 +64,7 @@
 9. `009_ava_event_daily_details.sql`：Ava 每日全域事件細節、原子 lease 與 30 分鐘失敗重試。
 10. `010_message_sequence.sql`：安放訊息對話內流水號、原子分配 trigger 與可靠分頁排序。
 11. `011_retrieval_shadow.sql`：pgvector、512 維 dialogue-window chunks、shadow jobs/runs/candidates、RLS 與受控 RPC。
+12. `012_retrieval_generation_canary.sql`：Deep allowlist generation runs/candidates、雙層 review、token／latency 觀測、30 天清理與 service-role RPC。
 
 已執行的 migration 不回頭改寫；修正以新編號追加。執行前先讀 SQL，執行後保存結果並跑對應 smoke test。
 
@@ -187,6 +189,29 @@ npm run retrieval:shadow:report
 Review 指令會在本機終端臨時顯示實際 embedding 使用的最近兩則 user context、current query、Top 5 候選與 threshold 狀態，不會寫出含全文檔案。`--limit` 代表本次要新完成的 runs 數量；工具會分頁跳過已完整標註的 runs，並接續 partial run 尚未標註的 candidates。
 
 Report 只輸出彙總數據至 gitignored `artifacts/retrieval-shadow/`。Phase 1 至少需要 50 個 completed runs 與 25 個完整 reviewed runs；shadow run/candidate 和已結束 job 保留 90 天，chunk 隨對話刪除。Phase 1.5 起，搜尋只接受結束於最早一則實際 recent user context 之前的 chunks，避免把 query 已帶入的最近對話重複召回；沒有合格 recent context 時才以 current query sequence 為上界。
+
+## Retrieval Generation Canary
+
+Phase 2 會把所有安放模型上下文從最近 20 則改為 10 則；只有最終模式仍為 Deep、無圖片、非危機且 UUID 位於 `RETRIEVAL_SHADOW_USER_IDS` 的請求，才可能同步注入較舊 user 原話。這些 allowlist 聊天會將搜尋命中的歷史文字再次送至 OpenAI Responses API；Mobile API 不回傳候選或分數。
+
+部署順序：
+
+1. 套用 migration `012_retrieval_generation_canary.sql`。
+2. 保持 `RETRIEVAL_GENERATION_ENABLED=false` 部署 server，確認 Light／Deep 正常且最近 10 則測試通過。
+3. 確認 `RETRIEVAL_SHADOW_ENABLED=true`、UUID allowlist 與既有 chunks 正常，再設定 `RETRIEVAL_GENERATION_ENABLED=true` 重啟 server。
+4. 用 allowlist 帳號送 Deep 純文字 smoke test；最高分未過 `0.60` 時應正常 abstain，通過時最多注入 2 個 user-only candidates。
+5. 檢查 `retrieval_generation_runs`：狀態、固定錯誤碼、2 秒內 retrieval latency、token 數；聊天回覆 JSON 不得出現 retrieval metadata。
+
+任何 embedding／DB／來源載入錯誤或 2 秒逾時都 fail-open，以最近 10 則完成聊天。立即回退只需將 `RETRIEVAL_GENERATION_ENABLED=false` 並重啟；Shadow 可保持開啟。Generation run/candidate 保存 30 天，由每分鐘 worker 清理。
+
+人工檢閱與報告：
+
+```bash
+npm run retrieval:generation:review -- --user-id=<uuid> --limit=25
+npm run retrieval:generation:report
+```
+
+Review 只在本機終端臨時 join 最近 10 則、本輪訊息、Top 5 candidates、實際 user-only 注入與最終回覆；候選標 `must/acceptable/forbidden/irrelevant`，回覆標 `helpful/neutral/harmful` 並回答 stale／sensitive。完整 25 個 injected runs 後，helpful 至少 50%，且 harmful、stale、sensitive、injected forbidden 均為 0 才算通過。Report 僅輸出脫敏彙總至 gitignored `artifacts/retrieval-generation/`。
 
 ## Expo Go 與未來 Preview APK
 
