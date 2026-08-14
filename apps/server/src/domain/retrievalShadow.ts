@@ -19,6 +19,10 @@ export function isEligibleShadowMessage(message: Message) {
 }
 
 export function buildShadowQuery(messages: Message[], queryMessageId: string) {
+  return buildShadowQueryParts(messages, queryMessageId).text;
+}
+
+export function buildShadowQueryParts(messages: Message[], queryMessageId: string) {
   const query = messages.find((message) => message.id === queryMessageId && message.role === "user");
   if (!query || !isEligibleShadowMessage(query)) throw new Error("shadow_query_ineligible");
   const recent = messages
@@ -26,10 +30,17 @@ export function buildShadowQuery(messages: Message[], queryMessageId: string) {
     .sort((left, right) => right.sequence - left.sequence)
     .slice(0, 2)
     .reverse();
-  return [
-    ...recent.map((message) => `最近訊息：${truncate(message.content, RETRIEVAL_SHADOW.maxContextCharacters)}`),
-    `目前訊息：${truncate(query.content, RETRIEVAL_SHADOW.maxCurrentCharacters)}`
-  ].join("\n");
+  const recentContext = recent.map((message) => truncate(message.content, RETRIEVAL_SHADOW.maxContextCharacters));
+  const currentQuery = truncate(query.content, RETRIEVAL_SHADOW.maxCurrentCharacters);
+  return {
+    recentContext,
+    currentQuery,
+    searchBeforeSequence: recent[0]?.sequence ?? query.sequence,
+    text: [
+      ...recentContext.map((content) => `最近訊息：${content}`),
+      `目前訊息：${currentQuery}`
+    ].join("\n")
+  };
 }
 
 export function buildShadowDialogueWindow(messages: Message[], anchorMessageId: string) {
@@ -52,4 +63,3 @@ export function buildShadowDialogueWindow(messages: Message[], anchorMessageId: 
 export function truncate(value: string, maxCharacters: number) {
   return [...value].slice(0, maxCharacters).join("");
 }
-

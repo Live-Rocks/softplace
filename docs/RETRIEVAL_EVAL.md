@@ -71,6 +71,17 @@ artifacts/retrieval-eval/reports/<timestamp>/report.md
 
 這是 synthetic Phase 0 基線，不是 production threshold。下一階段需在 Shadow mode 記錄匿名化命中、分數與延遲後再校準。
 
+## Phase 1 Shadow 基線（2026-08-14）
+
+- 完成 `53` 個 runs、人工完整檢閱 `25` 個 runs／`125` 個 Top 5 candidates，worker error 為 `0`。
+- 人工標籤為 must `19`、acceptable `37`、irrelevant `69`、forbidden `0`。
+- Threshold `0.60`：selected precision `82.6%`、query useful-hit `52.0%`、forbidden rate `0%`，共選中 `23` 個 candidates。
+- Queue latency P50／P95 為 `35,325／57,571 ms`；search latency P50／P95 為 `137／203 ms`。
+- `0.60` 保留為後續候選門檻，不是 production 決策；`0.65` precision 僅升至 `85.7%`，useful-hit 降至 `44.0%`。
+- 本批沒有任何人工 forbidden 樣本，因此只能說「未觀察到 forbidden retrieval」，不能推論敏感／危機風險已充分驗證。
+
+完整 v1 JSON／Markdown 報告保留在 gitignored `artifacts/retrieval-shadow/2026-08-14T08-17-10-107Z/`，不進版控。Phase 1.5 起，搜尋會排除與實際 recent user context 時間範圍重疊的 chunks；v1 基線不重算、不覆寫，也不和修正後的新 runs 直接混合比較。
+
 ## 修改資料集
 
 新增或修改案例後先執行：

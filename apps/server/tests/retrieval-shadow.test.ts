@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import test from "node:test";
 import type { Message } from "@softplace/shared";
-import { RETRIEVAL_SHADOW, buildShadowDialogueWindow, buildShadowQuery, truncate } from "../src/domain/retrievalShadow.js";
+import { RETRIEVAL_SHADOW, buildShadowDialogueWindow, buildShadowQuery, buildShadowQueryParts, truncate } from "../src/domain/retrievalShadow.js";
 import { processRetrievalShadowJobs, shadowErrorCode, type RetrievalShadowStore } from "../src/integrations/retrievalShadow.js";
 import { qualityAtThreshold } from "../src/scripts/retrievalShadowReport.js";
+import { candidatesToReview, formatCandidateHeader, formatReviewHeader, scanReviewRuns } from "../src/scripts/retrievalShadowReview.js";
 
 const messages: Message[] = [
   message("u1", 1, "user", "主管昨天又改了企劃"),
@@ -36,13 +37,100 @@ test("shadow builders reject image or crisis query and skip unsafe windows", () 
   assert.equal(buildShadowDialogueWindow(unsafe, "u3"), null);
 });
 
+test("review displays the exact embedding input, two context slots, and threshold state", () => {
+  const mixed = [
+    message("u0", 0, "user", "太早的內容"),
+    ...messages,
+    { ...message("unsafe", 6, "user", "危機內容"), crisisDetected: true },
+    message("future", 7, "user", "未來訊息")
+  ];
+  const eligibleAtQueryTime = mixed.filter((item) => item.sequence <= 5);
+  const parts = buildShadowQueryParts(eligibleAtQueryTime, "u3");
+  assert.equal(parts.text, buildShadowQuery(eligibleAtQueryTime, "u3"));
+  assert.deepEqual(parts.recentContext, ["主管昨天又改了企劃", "我今天看到信又緊張了"]);
+  assert.equal(parts.currentQuery, "果然又來了");
+  assert.equal(parts.searchBeforeSequence, 1);
+  const header = formatReviewHeader("run-1", parts);
+  assert.match(header, /Recent context 1: 主管昨天又改了企劃/);
+  assert.match(header, /Recent context 2: 我今天看到信又緊張了/);
+  assert.match(header, /Current query: 果然又來了/);
+  assert.match(header, new RegExp(parts.text));
+  assert.doesNotMatch(header, /危機內容|未來訊息|太早的內容/);
+  assert.equal(formatCandidateHeader({ rank: 1, score: 0.70581, passed_threshold: true }), "#1 score=0.7058 passed_threshold=yes");
+  assert.equal(formatCandidateHeader({ rank: 3, score: 0.521, passed_threshold: false }), "#3 score=0.5210 passed_threshold=no");
+});
+
+test("review query reconstruction excludes prior image and crisis context", () => {
+  const history: Message[] = [
+    message("older", 1, "user", "較早但合格"),
+    { ...message("image", 2, "user", "圖片訊息"), imagePresent: true },
+    { ...message("crisis", 3, "user", "危機訊息"), crisisDetected: true },
+    message("recent", 4, "user", "最近而且合格"),
+    message("query", 5, "user", "目前問題")
+  ];
+  const parts = buildShadowQueryParts(history, "query");
+  assert.deepEqual(parts.recentContext, ["較早但合格", "最近而且合格"]);
+  assert.equal(parts.searchBeforeSequence, 1);
+  assert.doesNotMatch(parts.text, /圖片訊息|危機訊息/);
+});
+
+test("review query display follows production truncation and shows missing context slots", () => {
+  const short: Message[] = [message("query", 1, "user", "甲".repeat(RETRIEVAL_SHADOW.maxCurrentCharacters + 2))];
+  const parts = buildShadowQueryParts(short, "query");
+  assert.equal(parts.currentQuery.length, RETRIEVAL_SHADOW.maxCurrentCharacters);
+  assert.equal(parts.searchBeforeSequence, 1);
+  const header = formatReviewHeader("run-2", parts);
+  assert.match(header, /Recent context 1: \[none\]/);
+  assert.match(header, /Recent context 2: \[none\]/);
+});
+
+test("shadow search cutoff uses one recent context or the current query when context is absent", () => {
+  const oneContext = [message("context", 3, "user", "上一則"), message("query", 5, "user", "目前")];
+  assert.equal(buildShadowQueryParts(oneContext, "query").searchBeforeSequence, 3);
+  assert.equal(buildShadowQueryParts([message("query", 5, "user", "目前")], "query").searchBeforeSequence, 5);
+});
+
+test("review pagination skips completed runs and continues until the requested number is reviewed", async () => {
+  const runs = Array.from({ length: 25 }, (_, index) => ({ id: index + 1, complete: index < 15 }));
+  const pages: Array<[number, number]> = [];
+  const visited: number[] = [];
+  const reviewed = await scanReviewRuns({
+    limit: 5,
+    pageSize: 7,
+    async loadPage(from, to) { pages.push([from, to]); return runs.slice(from, to + 1); },
+    async reviewRun(run) { visited.push(run.id); return !run.complete; }
+  });
+  assert.equal(reviewed, 5);
+  assert.deepEqual(pages, [[0, 6], [7, 13], [14, 20]]);
+  assert.deepEqual(visited.slice(-6), [15, 16, 17, 18, 19, 20]);
+});
+
+test("review pagination handles exhaustion and resumes only unlabeled candidates", async () => {
+  const reviewed = await scanReviewRuns({
+    limit: 5,
+    pageSize: 2,
+    async loadPage(from, to) { return [1, 2, 3].slice(from, to + 1); },
+    async reviewRun(run) { return run === 3; }
+  });
+  assert.equal(reviewed, 1);
+  assert.deepEqual(candidatesToReview([
+    { id: 1, review_label: "must" },
+    { id: 2, review_label: null },
+    { id: 3, review_label: null }
+  ]), [
+    { id: 2, review_label: null },
+    { id: 3, review_label: null }
+  ]);
+  assert.deepEqual(candidatesToReview([{ id: 1, review_label: "irrelevant" }]), []);
+});
+
 test("worker embeds query and window at 512-compatible shape, searches before saving current chunk, and stores no text", async () => {
   const order: string[] = [];
   const completed: any[] = [];
   const store: RetrievalShadowStore = {
     async claimJobs() { return [{ id: "job", userId: "user", conversationId: "conversation", queryMessageId: "u3", attempts: 1, createdAt: "2026-08-13T00:00:00.000Z" }]; },
     async getMessages() { return messages; },
-    async match(_job, sequence, embedding) { order.push("match"); assert.equal(sequence, 5); assert.deepEqual(embedding, [1, 0]); return [{ chunkId: "chunk-old", score: 0.7 }]; },
+    async match(_job, beforeSequence, embedding) { order.push("match"); assert.equal(beforeSequence, 1); assert.deepEqual(embedding, [1, 0]); return [{ chunkId: "chunk-old", score: 0.7 }]; },
     async upsertChunk(_job, start, end, embedding) { order.push("upsert"); assert.deepEqual([start, end], [3, 5]); assert.deepEqual(embedding, [0, 1]); },
     async complete(_job, _token, queueDelay, latency, candidates) { order.push("complete"); completed.push({ queueDelay, latency, candidates }); },
     async retry() { throw new Error("unexpected retry"); },
