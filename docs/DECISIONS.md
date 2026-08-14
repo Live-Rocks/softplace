@@ -113,3 +113,11 @@
 - 背景：最近 20 則能維持連續感，但加入 retrieval 後若仍完整保留會增加 token 與重複內容；Shadow 基線已證明部分較舊片段可被找回，但尚未證明直接注入的生成品質。
 - 決定：ADR-003 的模型上下文數量由 20 改為 10 則，Light 與 Deep 都適用。只有 Deep allowlist canary 在同步搜尋成功時，額外注入最多 2 個 threshold `0.60` 的 user-only 舊片段；搜尋仍使用 dialogue window。Generation 有獨立 kill switch，沿用 Shadow UUID allowlist。
 - 影響：短期上下文成本下降，Light／Deep 的上下文能力更明確分流；Deep 增加最多 2 秒 retrieval 等待與錯誤召回風險，因此必須 fail-open、保留人工雙層檢閱，且通過 25 個注入回覆前不得擴大。
+
+## ADR-015：Deep Canary 將 Top 5 user-only 候選交給同一次生成判斷
+
+- 日期：2026-08-15
+- 狀態：Accepted
+- 背景：真實 Canary 的「貓咪名字」案例中，正確原話已存在於索引並位於 Rank 4／5，但 `0.60`／Top 2 策略 abstain；降低 threshold 只會先注入 Rank 1／2 的無關內容。
+- 決定：僅對知情 allowlist Deep Canary，忽略 similarity threshold，將 Top 5 的 user 原話全域去重並在 1,200-token 公平上限內交給既有生成模型；不增加 reranker API 呼叫。舊 assistant 回覆、圖片與危機內容仍不注入。
+- 影響：提高 Top 5 內正確細節可被使用的機會，但也增加無關、過時或敏感候選進 prompt 的風險；新舊 runs 必須以 strategy 分開檢閱，出現 harmful／stale／sensitive／forbidden 時立即關閉 Generation。

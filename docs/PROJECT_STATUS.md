@@ -49,7 +49,8 @@
 - **程式已驗證**：Retrieval Phase 0 complete。40 題全虛構繁中資料比較事件摘要、user-only、完整對話窗口與三組 embedding 規格；首選候選為 `text-embedding-3-small` 512 維＋最近 user context＋`dialogue_window`。離線診斷 threshold `0.60` 的 Recall@3 為 `59.4%`、Forbidden 與 Sensitive/Crisis hit 均為 `0%`、abstention 為 `100%`；threshold 尚未成為 production 決策。
 - **使用者實測完成**：Retrieval Phase 1 Shadow mode 已在 allowlist 帳號累積 53 completed runs、0 errors，人工完整檢閱 25 runs／125 candidates。Threshold `0.60` 的 selected precision 為 `82.6%`、query useful-hit 為 `52%`；queue P50／P95 為 `35／58 秒`，search P50／P95 為 `137／203 ms`。本批沒有人工 forbidden 樣本，因此不可推論敏感風險已充分驗證；結果仍不進 prompt。
 - **使用者實測完成**：Retrieval Phase 1.5 已部署並完成 smoke test；新版 run 成功完成且無錯誤，5 個候選皆早於最早 recent user context 的搜尋上界，確認不再召回與 query context 重疊的 chunks。Review 顯示完整 query context 並採真正分頁；既有 53／25 v1 基線不重算，修正只影響部署後的新 runs，結果仍不進 prompt。
-- **已實作待部署**：Retrieval Phase 2 Deep allowlist canary。所有安放聊天改用最近 10 則；Deep allowlist 同步搜尋 Top 5、threshold `0.60`、最多注入 2 個 user-only 候選，受 1,200-token／2 秒上限與獨立 kill switch 保護。候選與最終回覆採雙層檢閱，目標為 25 個實際注入回覆；Mobile API 不暴露 retrieval metadata。
+- **使用者實測中**：Retrieval Phase 2 已部署至單一 allowlist。最近 10 則與 012 schema 正常；首個真實精確事實案例的正解「飽飽」存在於索引與 Top 5，但只排 Rank 4／5，舊 `0.60`／Top 2 策略安全 abstain，揭露真實排序不足。
+- **已實作待部署**：Retrieval Phase 2.1 改為 `top5_all`：Top 5 user 原話全域去重、公平共用 1,200-token 上限並交給同一次 Deep 生成，不增加 reranker 呼叫。Migration `013` 將新舊策略分版；2 秒 fail-open、kill switch、雙層檢閱與 Mobile 隱私邊界不變。
 
 ### Ava beta
 
@@ -75,15 +76,15 @@
 
 ## 近期優先順序
 
-1. 部署 Retrieval Phase 2 migration，以關閉 Generation flag 的狀態先驗證最近 10 則，再開啟單一 allowlist Deep canary。
-2. 完成 25 個注入回覆的候選＋回覆雙層人工檢閱，確認 helpful 至少 50% 且無 harmful／stale／sensitive／injected forbidden。
+1. 關閉 Generation、部署 Phase 2.1、套用 migration `013`，再重新開啟單一 allowlist Top 5 Canary。
+2. 先重測「飽飽」案例並 review 1 run，再完成 25 個 `top5_all` 注入回覆的雙層人工檢閱。
 3. 長時間實測 Ava 延遲回覆、主動訊息、未讀與跨日生活脈絡。
 4. 修正 leased reply job 補傳訊息競態，定義 Worker context snapshot 邊界。
 5. 在少量封測前補齊監控、錯誤可讀性、資料刪除與隱私說明。
 
 ## 延後項目
 
-Retrieval Phase 0、Phase 1 Shadow 與 Phase 1.5 已完成；Phase 2 僅進入 Deep allowlist canary，尚未擴大為 production RAG。
+Retrieval Phase 0、Phase 1 Shadow 與 Phase 1.5 已完成；Phase 2／2.1 僅供單一知情 Deep allowlist Canary，尚未擴大為 production RAG。
 
 - 正式付款、訂閱與方案升降級。
 - Google／Apple 等第三方登入。

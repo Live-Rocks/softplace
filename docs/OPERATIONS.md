@@ -194,13 +194,14 @@ Report 只輸出彙總數據至 gitignored `artifacts/retrieval-shadow/`。Phase
 
 Phase 2 會把所有安放模型上下文從最近 20 則改為 10 則；只有最終模式仍為 Deep、無圖片、非危機且 UUID 位於 `RETRIEVAL_SHADOW_USER_IDS` 的請求，才可能同步注入較舊 user 原話。這些 allowlist 聊天會將搜尋命中的歷史文字再次送至 OpenAI Responses API；Mobile API 不回傳候選或分數。
 
-部署順序：
+Phase 2.1 Top 5 部署順序：
 
-1. 套用 migration `012_retrieval_generation_canary.sql`。
-2. 保持 `RETRIEVAL_GENERATION_ENABLED=false` 部署 server，確認 Light／Deep 正常且最近 10 則測試通過。
-3. 確認 `RETRIEVAL_SHADOW_ENABLED=true`、UUID allowlist 與既有 chunks 正常，再設定 `RETRIEVAL_GENERATION_ENABLED=true` 重啟 server。
-4. 用 allowlist 帳號送 Deep 純文字 smoke test；最高分未過 `0.60` 時應正常 abstain，通過時最多注入 2 個 user-only candidates。
-5. 檢查 `retrieval_generation_runs`：狀態、固定錯誤碼、2 秒內 retrieval latency、token 數；聊天回覆 JSON 不得出現 retrieval metadata。
+1. 確認 migration `012_retrieval_generation_canary.sql` 已套用，並先設定 `RETRIEVAL_GENERATION_ENABLED=false`。
+2. 部署 server，保持 Generation 關閉並確認 Light／Deep 正常。
+3. 套用 migration `013_retrieval_generation_top5.sql`；既有 rows 保留為 `threshold_top2`。
+4. 確認 `RETRIEVAL_SHADOW_ENABLED=true`、UUID allowlist 與既有 chunks 正常，再設定 `RETRIEVAL_GENERATION_ENABLED=true` 重啟 server。
+5. 用 allowlist 帳號送 Deep 純文字 smoke test；有候選時應記為 `selection_strategy=top5_all`、`threshold=null`、`injected_count<=5`、`retrieval_tokens<=1200`。
+6. 檢查固定錯誤碼與 2 秒內 retrieval latency；聊天回覆 JSON 不得出現 retrieval metadata，並立刻以 review `--limit=1` 檢查實際注入與回覆。
 
 任何 embedding／DB／來源載入錯誤或 2 秒逾時都 fail-open，以最近 10 則完成聊天。立即回退只需將 `RETRIEVAL_GENERATION_ENABLED=false` 並重啟；Shadow 可保持開啟。Generation run/candidate 保存 30 天，由每分鐘 worker 清理。
 
@@ -211,7 +212,7 @@ npm run retrieval:generation:review -- --user-id=<uuid> --limit=25
 npm run retrieval:generation:report
 ```
 
-Review 只在本機終端臨時 join 最近 10 則、本輪訊息、Top 5 candidates、實際 user-only 注入與最終回覆；候選標 `must/acceptable/forbidden/irrelevant`，回覆標 `helpful/neutral/harmful` 並回答 stale／sensitive。完整 25 個 injected runs 後，helpful 至少 50%，且 harmful、stale、sensitive、injected forbidden 均為 0 才算通過。Report 僅輸出脫敏彙總至 gitignored `artifacts/retrieval-generation/`。
+Review 預設只處理 `top5_all`，在本機終端臨時 join 最近 10 則、本輪訊息、Top 5 candidates、實際去重／截斷後的 user-only 注入與最終回覆；候選標 `must/acceptable/forbidden/irrelevant`，回覆標 `helpful/neutral/harmful` 並回答 stale／sensitive。完整 25 個 injected runs 後，helpful 至少 50%，且 harmful、stale、sensitive、injected forbidden 均為 0 才算通過。Report 依 strategy 分組並額外顯示 irrelevant injected 比例、平均 injected chunks 與 token；只輸出脫敏彙總至 gitignored `artifacts/retrieval-generation/`。
 
 ## Expo Go 與未來 Preview APK
 

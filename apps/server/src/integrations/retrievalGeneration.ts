@@ -197,7 +197,8 @@ export async function recordGenerationRun(input: GenerationRunRecord) {
     p_actual_input_tokens: input.tokenMetrics.actualInputTokens,
     p_cached_input_tokens: input.tokenMetrics.cachedInputTokens,
     p_output_tokens: input.tokenMetrics.outputTokens,
-    p_candidates: input.retrieval.candidates
+    p_candidates: input.retrieval.candidates,
+    p_selection_strategy: RETRIEVAL_GENERATION.selectionStrategy
   });
   if (error) throw new Error("generation_observation_write_failed");
 }
