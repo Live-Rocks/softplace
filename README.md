@@ -101,7 +101,7 @@ curl https://softplace.zeabur.app/health
 - 安放深度模式：`gpt-5.4-mini`
 - Ava：`gpt-5.4-mini`
 
-模型名稱由 server 環境變數控制。OpenAI Responses 預設 `store:false`；安放每次只送最近 10 則訊息與已確認記憶。Deep allowlist 可另外加入受控的舊對話 retrieval。
+模型名稱由 server 環境變數控制。OpenAI Responses 預設 `store:false`；安放每次只送最近 10 則訊息與已確認記憶。Deep allowlist Canary 可另外加入去重、user-only、最多 1,200 tokens 的 Top 5 舊對話候選。
 
 ## 文件索引
 

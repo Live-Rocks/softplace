@@ -29,7 +29,7 @@ export async function main(argv = process.argv.slice(2)) {
       async loadPage(from, to) {
         const { data, error } = await db.from("retrieval_generation_runs")
           .select("id,query_message_id,assistant_message_id,response_effect,stale_detected,sensitive_detected,created_at")
-          .eq("user_id", userId).eq("status", "injected")
+          .eq("user_id", userId).eq("status", "injected").eq("selection_strategy", "top5_all")
           .order("created_at", { ascending: true }).range(from, to);
         if (error) throw new Error("generation_review_read_failed");
         return data ?? [];
@@ -56,7 +56,7 @@ export async function main(argv = process.argv.slice(2)) {
           .order("message_sequence", { ascending: false }).limit(10);
         if (historyError) throw new Error("generation_review_read_failed");
         const history = (historyRows ?? []).reverse().map(mapMessage);
-        const prepared = prepareGenerationContext(candidates.map(toDomainCandidate));
+        const prepared = prepareGenerationContext(candidates.filter((candidate) => candidate.injected).map(toDomainCandidate));
         console.info(formatGenerationReviewHeader(run.id, history, query.content, prepared?.text ?? "[missing]", assistant.content));
 
         for (const candidate of pendingCandidates) {
@@ -172,4 +172,3 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exitCode = 1;
   });
 }
-

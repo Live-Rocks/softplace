@@ -6,8 +6,8 @@ export const RETRIEVAL_GENERATION = {
   historyLimit: 10,
   baselineHistoryLimit: 20,
   candidateLimit: 5,
-  injectionLimit: 2,
-  threshold: 0.6,
+  injectionLimit: 5,
+  selectionStrategy: "top5_all",
   tokenBudget: 1200,
   timeoutMs: 2000,
   retentionDays: 30
@@ -55,16 +55,14 @@ export function generationSearchBeforeSequence(history: Message[]) {
 
 export function prepareGenerationContext(
   candidates: GenerationCandidate[],
-  options: { threshold?: number; injectionLimit?: number; tokenBudget?: number } = {}
+  options: { injectionLimit?: number; tokenBudget?: number } = {}
 ): PreparedGenerationContext | null {
-  const threshold = options.threshold ?? RETRIEVAL_GENERATION.threshold;
   const injectionLimit = options.injectionLimit ?? RETRIEVAL_GENERATION.injectionLimit;
   const tokenBudget = options.tokenBudget ?? RETRIEVAL_GENERATION.tokenBudget;
   const seenMessages = new Set<string>();
-  const selected: Array<{ rank: number; userMessages: string[]; chunkId: string }> = [];
+  const candidatesWithUniqueUserMessages: ContextCandidate[] = [];
 
-  for (const candidate of [...candidates].sort((left, right) => left.rank - right.rank)) {
-    if (candidate.score < threshold || selected.length >= injectionLimit) continue;
+  for (const candidate of [...candidates].sort((left, right) => left.rank - right.rank).slice(0, injectionLimit)) {
     const messages = candidate.source
       .filter((message) => message.role === "user")
       .filter((message) => {
@@ -75,41 +73,80 @@ export function prepareGenerationContext(
       })
       .sort((left, right) => left.sequence - right.sequence);
     if (!messages.length) continue;
-
-    const prepared = { rank: candidate.rank, userMessages: [] as string[], chunkId: candidate.chunkId };
-    for (const message of messages) {
-      const content = truncate(message.content, RETRIEVAL_SHADOW.maxChunkMessageCharacters);
-      const full = [...selected, { ...prepared, userMessages: [...prepared.userMessages, content] }];
-      if (countTokens(formatContext(full)) <= tokenBudget) {
-        prepared.userMessages.push(content);
-        continue;
-      }
-      const truncated = fitContentToBudget(selected, prepared, content, tokenBudget);
-      if (truncated) prepared.userMessages.push(truncated);
-      break;
-    }
-    if (prepared.userMessages.length) selected.push(prepared);
+    candidatesWithUniqueUserMessages.push({
+      rank: candidate.rank,
+      chunkId: candidate.chunkId,
+      userMessages: messages.map((message) => truncate(message.content, RETRIEVAL_SHADOW.maxChunkMessageCharacters))
+    });
   }
 
+  const selected = fitCandidatesFairly(candidatesWithUniqueUserMessages, tokenBudget);
   if (!selected.length) return null;
   const text = formatContext(selected);
   return { text, tokenCount: countTokens(text), injectedChunkIds: selected.map((candidate) => candidate.chunkId) };
 }
 
-function fitContentToBudget(
-  selected: Array<{ rank: number; userMessages: string[]; chunkId: string }>,
-  candidate: { rank: number; userMessages: string[]; chunkId: string },
-  content: string,
-  budget: number
-) {
+type ContextCandidate = { rank: number; userMessages: string[]; chunkId: string };
+
+function fitCandidatesFairly(candidates: ContextCandidate[], tokenBudget: number) {
+  if (!candidates.length || tokenBudget < 1) return [];
+  const emptyContext = candidates.map((candidate) => ({ ...candidate, userMessages: [] }));
+  const envelopeTokens = countTokens(formatContext(emptyContext));
+  // Leave room for JSON string escaping and token-boundary effects, then verify the final payload exactly.
+  let contentBudget = Math.max(0, tokenBudget - envelopeTokens - 64);
+
+  while (contentBudget >= 0) {
+    const candidateNeeds = candidates.map((candidate) =>
+      candidate.userMessages.reduce((total, message) => total + countTokens(message), 0)
+    );
+    const candidateBudgets = allocateFairly(candidateNeeds, contentBudget);
+    const prepared = candidates.flatMap((candidate, candidateIndex) => {
+      const messageNeeds = candidate.userMessages.map(countTokens);
+      const messageBudgets = allocateFairly(messageNeeds, candidateBudgets[candidateIndex] ?? 0);
+      const userMessages = candidate.userMessages
+        .map((message, messageIndex) => truncateToTokens(message, messageBudgets[messageIndex] ?? 0))
+        .filter(Boolean);
+      return userMessages.length ? [{ ...candidate, userMessages }] : [];
+    });
+    if (!prepared.length) return [];
+    const actualTokens = countTokens(formatContext(prepared));
+    if (actualTokens <= tokenBudget) return prepared;
+    contentBudget -= Math.max(1, actualTokens - tokenBudget);
+  }
+  return [];
+}
+
+function allocateFairly(needs: number[], budget: number) {
+  const allocations = needs.map(() => 0);
+  const remaining = new Set(needs.map((_need, index) => index).filter((index) => needs[index]! > 0));
+  let available = Math.max(0, Math.floor(budget));
+  while (remaining.size && available > 0) {
+    const share = Math.max(1, Math.floor(available / remaining.size));
+    let consumed = 0;
+    for (const index of [...remaining]) {
+      const unmet = needs[index]! - allocations[index]!;
+      const grant = Math.min(unmet, share, available - consumed);
+      allocations[index]! += grant;
+      consumed += grant;
+      if (allocations[index] === needs[index]) remaining.delete(index);
+      if (consumed >= available) break;
+    }
+    if (consumed === 0) break;
+    available -= consumed;
+  }
+  return allocations;
+}
+
+function truncateToTokens(content: string, tokenLimit: number) {
+  if (tokenLimit < 1) return "";
+  if (countTokens(content) <= tokenLimit) return content;
   const characters = [...content];
   let low = 0;
   let high = characters.length;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
     const value = characters.slice(0, middle).join("");
-    const trial = [...selected, { ...candidate, userMessages: [...candidate.userMessages, value] }];
-    if (countTokens(formatContext(trial)) <= budget) low = middle;
+    if (countTokens(value) <= tokenLimit) low = middle;
     else high = middle - 1;
   }
   return characters.slice(0, low).join("");
@@ -118,7 +155,7 @@ function fitContentToBudget(
 function formatContext(candidates: Array<{ rank: number; userMessages: string[] }>) {
   return JSON.stringify({
     type: "retrieved_user_history",
-    warning: "可能相關但不一定適用；本輪與最近對話優先。",
+    warning: "候選彼此可能無關；只能使用與本輪直接對應的舊使用者原話。本輪與最近對話優先，其餘完全忽略。",
     candidates: candidates.map((candidate) => ({ rank: candidate.rank, user_messages: candidate.userMessages }))
   });
 }

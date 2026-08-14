@@ -85,11 +85,18 @@ artifacts/retrieval-eval/reports/<timestamp>/report.md
 ## Phase 2 Deep Generation Canary
 
 - 所有安放生成只使用最近 10 則；Deep allowlist 才同步執行 generation retrieval。
-- 搜尋 Top 5、threshold `0.60`，排除最近 10 則時間範圍與候選重疊後，最多注入 2 個 chunks。
+- Phase 2 原始基線搜尋 Top 5、threshold `0.60`，最多注入 2 個 chunks；歷史 rows 標記為 `threshold_top2`。
 - Embedding／搜尋使用 `dialogue_window`；實際 prompt 只放歷史 user 原話，不放舊 assistant 回覆，整段最多 1,200 tokens。
 - Retrieval 最多等待 2 秒；錯誤、逾時與無合格候選都以最近 10 則正常生成。Shadow pipeline 繼續運作。
 - 只記錄 ID、rank、score、是否注入、延遲、token 與人工標籤；Mobile API 與一般 log 不含候選或全文。
 - 完成 25 個 injected runs 的候選＋回覆雙層檢閱後，要求 helpful 至少 50%，且 harmful、stale、sensitive、injected forbidden 全為 0。Token 節省只報告、不作硬門檻。
+
+## Phase 2.1 Top 5 User-Only Canary
+
+- 真實「貓咪名字」案例的正確原話位於 Rank 4／5、score 約 `0.49`；降低 threshold 只會先選中無關 Rank 1／2，因此不調低門檻。
+- 新策略 `top5_all` 忽略 similarity threshold，將 Top 5 的 user 原話依 message ID 去重，在公平共用的 1,200-token 上限內交給同一次 Deep 生成；搜尋 embedding、最近 10 則與 2 秒上限不變。
+- 不新增 reranker 呼叫。候選彼此視為可能無關，prompt 只能使用與本輪直接對應的原話，不得合併事件或憑低相關候選宣稱記得。
+- Review/report 只以 `top5_all` 新 runs 計算 Phase 2.1 gate，並分別保留 `threshold_top2` 歷史基線、irrelevant injected 比例、平均 injected chunks 與 token 指標。
 
 ## 修改資料集
 
