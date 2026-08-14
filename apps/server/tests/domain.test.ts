@@ -203,7 +203,7 @@ test("current mode guidance is the final instruction after images and memories",
   assert.ok(prompt.endsWith("虛構情節。"));
 });
 
-test("OpenAI context keeps the most recent 20 messages", () => {
+test("OpenAI context keeps the most recent 10 messages", () => {
   const history: Message[] = Array.from({ length: 24 }, (_, index) => ({
     id: `message-${index}`,
     conversationId: "conversation",
@@ -213,8 +213,8 @@ test("OpenAI context keeps the most recent 20 messages", () => {
   }));
 
   const recent = buildRecentMessages(history);
-  assert.equal(recent.length, 20);
-  assert.equal(recent[0]?.content, "content-4");
+  assert.equal(recent.length, 10);
+  assert.equal(recent[0]?.content, "content-14");
   assert.equal(recent.at(-1)?.content, "content-23");
 });
 

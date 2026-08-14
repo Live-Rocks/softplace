@@ -10,6 +10,10 @@ import {
 } from "../src/integrations/openai.js";
 import { createMemoryRepository } from "../src/integrations/repository.js";
 import { chatRouter } from "../src/routes/chat.js";
+import type {
+  GenerationRetriever,
+  GenerationRunRecorder
+} from "../src/integrations/retrievalGeneration.js";
 import type { Repository } from "../src/types.js";
 
 const testUser = {
@@ -22,7 +26,8 @@ async function withTestServer(
   generateReply: (input: GenerateCompanionReplyInput) => Promise<{ content: string; provider: "openai" | "local" }>,
   run: (baseUrl: string, repository: ReturnType<typeof createMemoryRepository>) => Promise<void>,
   repository: Repository = createMemoryRepository([testUser]),
-  enqueueShadow: (userId: string, conversationId: string, queryMessageId: string) => Promise<unknown> = async () => null
+  enqueueShadow: (userId: string, conversationId: string, queryMessageId: string) => Promise<unknown> = async () => null,
+  generation?: { retrieve?: GenerationRetriever; record?: GenerationRunRecorder }
 ) {
   await repository.getOrCreateProfile(testUser);
   const app = express();
@@ -31,7 +36,13 @@ async function withTestServer(
     req.user = testUser;
     next();
   });
-  app.use("/api/chat", chatRouter(repository, generateReply, enqueueShadow));
+  app.use("/api/chat", chatRouter(
+    repository,
+    generateReply,
+    enqueueShadow,
+    generation?.retrieve,
+    generation?.record
+  ));
   app.use((_error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     res.status(500).json({ error: "test error", code: "internal_error" });
   });
@@ -65,7 +76,7 @@ async function consumeDeepQuota(repository: Repository, count: number) {
   }
 }
 
-test("chat sends only the previous 20 messages and charges successful deep replies", async () => {
+test("chat sends only the previous 10 messages and charges successful deep replies", async () => {
   let captured: GenerateCompanionReplyInput | null = null;
   await withTestServer(
     async (input) => {
@@ -96,7 +107,7 @@ test("chat sends only the previous 20 messages and charges successful deep repli
       assert.equal(body.mode, "deep");
       assert.equal(body.provider, "openai");
       assert.equal(body.usage.deepMessagesUsed, 1);
-      assert.equal(captured?.history.length, 20);
+      assert.equal(captured?.history.length, 10);
       assert.deepEqual(
         captured?.history.map((message) => message.sequence),
         [...(captured?.history.map((message) => message.sequence) ?? [])].sort((a, b) => a - b)
@@ -134,6 +145,118 @@ test("light requests use the light model and only light prompt guidance", async 
       assert.doesNotMatch(captured?.instructions ?? "", /【本輪模式：深度模式】/);
     }
   );
+});
+
+test("deep allowlist canary injects user-only retrieval while keeping the Mobile response private", async () => {
+  const originalGeneration = config.retrievalGenerationEnabled;
+  const originalShadow = config.retrievalShadowEnabled;
+  const originalIds = new Set(config.retrievalShadowUserIds);
+  config.retrievalGenerationEnabled = true;
+  config.retrievalShadowEnabled = true;
+  config.retrievalShadowUserIds.clear();
+  config.retrievalShadowUserIds.add(testUser.id);
+  let captured: GenerateCompanionReplyInput | null = null;
+  const recorded: any[] = [];
+  try {
+    await withTestServer(
+      async (input) => {
+        captured = input;
+        return {
+          content: "你又遇到那個反覆改動的狀況了。",
+          provider: "openai",
+          usage: { inputTokens: 900, cachedInputTokens: 100, outputTokens: 40 }
+        };
+      },
+      async (baseUrl, repository) => {
+        const conversation = await repository.getOrCreatePrimaryConversation(testUser.id);
+        for (let index = 0; index < 14; index += 1) {
+          await repository.createMessage({
+            conversationId: conversation.id,
+            role: index % 2 ? "assistant" : "user",
+            content: `history-${index}`
+          });
+        }
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: "又來了", requestedMode: "deep" })
+        });
+        assert.equal(response.status, 200);
+        const body = await response.json() as Record<string, unknown>;
+        assert.doesNotMatch(JSON.stringify(body), /retrieval|chunk|score/i);
+        assert.equal(captured?.history.length, 10);
+        assert.equal(captured?.retrievalContext, "{\"type\":\"retrieved_user_history\"}");
+        assert.match(captured?.instructions ?? "", /較舊對話參考規則/);
+        assert.equal(recorded.length, 1);
+        assert.equal(recorded[0].retrieval.status, "injected");
+        assert.equal(recorded[0].tokenMetrics.actualInputTokens, 900);
+        assert.ok(recorded[0].tokenMetrics.history20Tokens >= recorded[0].tokenMetrics.history10Tokens);
+      },
+      createMemoryRepository([testUser]),
+      async () => null,
+      {
+        async retrieve(input) {
+          assert.equal(input.history.length, 10);
+          assert.deepEqual(input.history.map((message) => message.sequence), [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+          return {
+            status: "injected",
+            context: "{\"type\":\"retrieved_user_history\"}",
+            candidates: [{ chunkId: "chunk-1", rank: 1, score: 0.7, injected: true }],
+            embeddingLatencyMs: 20,
+            searchLatencyMs: 10,
+            totalLatencyMs: 30,
+            retrievalTokens: 12,
+            errorCode: null
+          };
+        },
+        async record(input) { recorded.push(input); }
+      }
+    );
+  } finally {
+    config.retrievalGenerationEnabled = originalGeneration;
+    config.retrievalShadowEnabled = originalShadow;
+    config.retrievalShadowUserIds.clear();
+    for (const id of originalIds) config.retrievalShadowUserIds.add(id);
+  }
+});
+
+test("generation retrieval failure falls back to ten-message chat and records a redacted fallback", async () => {
+  const originalGeneration = config.retrievalGenerationEnabled;
+  const originalShadow = config.retrievalShadowEnabled;
+  const originalIds = new Set(config.retrievalShadowUserIds);
+  config.retrievalGenerationEnabled = true;
+  config.retrievalShadowEnabled = true;
+  config.retrievalShadowUserIds.clear();
+  config.retrievalShadowUserIds.add(testUser.id);
+  let captured: GenerateCompanionReplyInput | null = null;
+  const recorded: any[] = [];
+  try {
+    await withTestServer(
+      async (input) => { captured = input; return { content: "正常回覆", provider: "openai" }; },
+      async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: "今天有點累", requestedMode: "deep" })
+        });
+        assert.equal(response.status, 200);
+        assert.equal(captured?.retrievalContext, undefined);
+        assert.doesNotMatch(captured?.instructions ?? "", /較舊對話參考規則/);
+        assert.equal(recorded[0]?.retrieval.status, "fallback");
+        assert.equal(recorded[0]?.retrieval.errorCode, "generation_retrieval_failed");
+      },
+      createMemoryRepository([testUser]),
+      async () => null,
+      {
+        async retrieve() { throw new Error("private provider payload"); },
+        async record(input) { recorded.push(input); }
+      }
+    );
+  } finally {
+    config.retrievalGenerationEnabled = originalGeneration;
+    config.retrievalShadowEnabled = originalShadow;
+    config.retrievalShadowUserIds.clear();
+    for (const id of originalIds) config.retrievalShadowUserIds.add(id);
+  }
 });
 
 test("images force the deep model and deep prompt even when light mode was requested", async () => {

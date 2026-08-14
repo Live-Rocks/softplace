@@ -17,6 +17,8 @@
     "retrieval:shadow:backfill": "npm --workspace apps/server run retrieval:shadow:backfill --",
     "retrieval:shadow:review": "npm --workspace apps/server run retrieval:shadow:review --",
     "retrieval:shadow:report": "npm --workspace apps/server run retrieval:shadow:report --",
+    "retrieval:generation:review": "npm --workspace apps/server run retrieval:generation:review --",
+    "retrieval:generation:report": "npm --workspace apps/server run retrieval:generation:report --",
     "typecheck": "npm --workspace apps/server run typecheck && npm --workspace apps/mobile run typecheck"
   },
   "engines": {

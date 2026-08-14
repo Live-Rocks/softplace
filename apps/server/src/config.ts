@@ -18,6 +18,7 @@ export const config = {
   chatRateLimitPerHour: parsePositiveIntegerEnv(process.env.CHAT_RATE_LIMIT_PER_HOUR, 120),
   deepReservationTtlSeconds: parsePositiveIntegerEnv(process.env.DEEP_RESERVATION_TTL_SECONDS, 120),
   retrievalShadowEnabled: parseBooleanEnv(process.env.RETRIEVAL_SHADOW_ENABLED),
+  retrievalGenerationEnabled: parseBooleanEnv(process.env.RETRIEVAL_GENERATION_ENABLED),
   retrievalShadowUserIds: new Set(
     (process.env.RETRIEVAL_SHADOW_USER_IDS ?? "")
       .split(",")
@@ -62,5 +63,8 @@ export function assertRuntimeConfig() {
   }
   if ((config.avaFeatureEnabled || config.retrievalShadowEnabled) && !config.companionWorkerSecret) {
     throw new Error("COMPANION_WORKER_SECRET is required when Ava or retrieval shadow is enabled.");
+  }
+  if (config.retrievalGenerationEnabled && !config.retrievalShadowEnabled) {
+    throw new Error("RETRIEVAL_SHADOW_ENABLED must be true when RETRIEVAL_GENERATION_ENABLED is true.");
   }
 }
