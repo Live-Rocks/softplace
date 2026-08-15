@@ -50,7 +50,7 @@
 - **使用者實測完成**：Retrieval Phase 1 Shadow mode 已在 allowlist 帳號累積 53 completed runs、0 errors，人工完整檢閱 25 runs／125 candidates。Threshold `0.60` 的 selected precision 為 `82.6%`、query useful-hit 為 `52%`；queue P50／P95 為 `35／58 秒`，search P50／P95 為 `137／203 ms`。本批沒有人工 forbidden 樣本，因此不可推論敏感風險已充分驗證；結果仍不進 prompt。
 - **使用者實測完成**：Retrieval Phase 1.5 已部署並完成 smoke test；新版 run 成功完成且無錯誤，5 個候選皆早於最早 recent user context 的搜尋上界，確認不再召回與 query context 重疊的 chunks。Review 顯示完整 query context 並採真正分頁；既有 53／25 v1 基線不重算，修正只影響部署後的新 runs，結果仍不進 prompt。
 - **使用者實測中**：Retrieval Phase 2 已部署至單一 allowlist。最近 10 則與 012 schema 正常；首個真實精確事實案例的正解「飽飽」存在於索引與 Top 5，但只排 Rank 4／5，舊 `0.60`／Top 2 策略安全 abstain，揭露真實排序不足。
-- **已實作待部署**：Retrieval Phase 2.1 改為 `top5_all`：Top 5 user 原話全域去重、公平共用 1,200-token 上限並交給同一次 Deep 生成，不增加 reranker 呼叫。Migration `013` 將新舊策略分版；2 秒 fail-open、kill switch、雙層檢閱與 Mobile 隱私邊界不變。
+- **已部署、使用者實測中**：Retrieval Phase 2.1 與 migration `013` 已上線。首筆成功 `top5_all` run 注入 5／5 candidates、retrieval 使用 172 tokens／823 ms，並正確回答貓咪名字「飽飽」；另有一筆在 2,003 ms 觸發 `generation_retrieval_timeout` 並安全 fallback。已完成 1／25 個 runs 的人工檢閱，尚不足以宣稱 Phase 2.1 通過。
 
 ### Ava beta
 
@@ -76,8 +76,8 @@
 
 ## 近期優先順序
 
-1. 關閉 Generation、部署 Phase 2.1、套用 migration `013`，再重新開啟單一 allowlist Top 5 Canary。
-2. 先重測「飽飽」案例並 review 1 run，再完成 25 個 `top5_all` 注入回覆的雙層人工檢閱。
+1. 完成剩餘 24 個 `top5_all` 注入回覆的雙層人工檢閱，嚴格區分真正有幫助的 `acceptable` 與僅無害但無關的 `irrelevant`。
+2. 持續觀察 `generation_retrieval_timeout` 比例與 latency P50／P95，完成 Phase 2.1 脫敏報告後再做 go/no-go。
 3. 長時間實測 Ava 延遲回覆、主動訊息、未讀與跨日生活脈絡。
 4. 修正 leased reply job 補傳訊息競態，定義 Worker context snapshot 邊界。
 5. 在少量封測前補齊監控、錯誤可讀性、資料刪除與隱私說明。

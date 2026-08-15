@@ -97,6 +97,9 @@ artifacts/retrieval-eval/reports/<timestamp>/report.md
 - 新策略 `top5_all` 忽略 similarity threshold，將 Top 5 的 user 原話依 message ID 去重，在公平共用的 1,200-token 上限內交給同一次 Deep 生成；搜尋 embedding、最近 10 則與 2 秒上限不變。
 - 不新增 reranker 呼叫。候選彼此視為可能無關，prompt 只能使用與本輪直接對應的原話，不得合併事件或憑低相關候選宣稱記得。
 - Review/report 只以 `top5_all` 新 runs 計算 Phase 2.1 gate，並分別保留 `threshold_top2` 歷史基線、irrelevant injected 比例、平均 injected chunks 與 token 指標。
+- 2026-08-15 初始 smoke test：首筆成功 run 注入 5／5 candidates，retrieval 為 172 tokens／823 ms，並從原本位於 Rank 4／5 的正確原話回答「飽飽」，證明 Top 5 能補足舊 Top 2 的這次 recall miss；同批另有一筆在 2,003 ms timeout 後安全 fallback。
+- 目前僅完成 1／25 個 `top5_all` runs 的人工檢閱，尚不宣稱 Phase 2.1 通過，也不將尚待語意確認的 candidate label 分布寫入基線。
+- 若 Top 5 提高 recall，但 25-run 檢閱顯示無關、過時或敏感注入偏高，Phase 2.2 再評估以 rerank 將 Top 5 重排後只注入最相關的 1～2 個候選，並衡量額外延遲。
 
 ## 修改資料集
 
