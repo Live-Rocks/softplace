@@ -6,7 +6,7 @@ SoftPlace 是 npm workspaces monorepo。Mobile 只持有公開 Supabase 設定�
 
 | 元件 | 責任 |
 | --- | --- |
-| `apps/mobile` | Expo React Native UI、Passwordless Auth session、呼叫 API、畫面輪詢 |
+| `apps/mobile` | Expo React Native UI、Passwordless Auth session、呼叫 API、畫面輪詢、Push Token 註冊與通知導頁 |
 | `apps/server` | Auth 驗證、業務規則、OpenAI、額度、危機攔截、Ava Worker |
 | `packages/shared` | Mobile／Server 共用 request、response 與 domain 型別 |
 | Supabase Auth | Email OTP、access token、使用者身分 |
@@ -95,7 +95,10 @@ sequenceDiagram
     participant C as Supabase Cron
     participant W as Ava Worker
     participant O as OpenAI
+    participant P as Expo Push
 
+    M->>S: 登入後 POST /api/push-tokens
+    S->>DB: upsert Expo Push Token
     M->>S: POST /api/companions/ava/messages
     S->>S: 依台北生活作息計算 due_at
     S->>DB: enqueue_companion_message
@@ -106,13 +109,15 @@ sequenceDiagram
     W->>O: 生活情境＋對話 input
     O-->>W: Ava 回覆
     W->>DB: complete_companion_job
+    W->>P: 傳送 Ava 遠端推播
+    P-->>M: 背景／關閉 App 通知
     M->>S: 每 12 秒輪詢 Ava messages
     S-->>M: 新訊息與 state
 ```
 
 Ava 生活以 `Asia/Taipei` 計算。分時作息仍由 server 程式決定；全域事件保存為 2～3 天的 `ava_event_runs` 與每日 phase，同一天對所有使用者相同。Worker 每天為該 phase 生成一份全域事件細節，失敗時回退固定骨架；這份背景會低調注入回覆與主動訊息，但不讀取或保存任何使用者私訊。完整分時表留在 server；OpenAI 只收到「訊息傳來時」、「目前」與精簡事件背景。Worker 每次最多 claim 1 個 job，lease 與 RPC 避免同一 job 被重複完成。
 
-Server 已有 Expo push sender、push token API 與資料表，但 Mobile 尚未安裝並註冊 Android push token，因此目前由 Ava 頁面每 12 秒、App 其他分頁每 30 秒輪詢。
+Mobile 已安裝通知套件，登入後會取得並向 Server 註冊 Expo Push Token；Server Worker 完成 Ava 回覆後會送出遠端推播，點擊通知可導向 Ava。Android Preview APK 已完成 token 註冊及背景／關閉 App 收訊的實機驗收；iOS 尚未納入這次驗收。Ava 頁面每 12 秒、App 其他分頁每 30 秒的輪詢仍保留，用於前景畫面與狀態同步，也作為推播未送達時的 fallback。
 
 ## API
 

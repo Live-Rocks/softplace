@@ -65,6 +65,7 @@
 - 背景：Ava 必須有非立即回覆與主動訊息，不能讓 Mobile request 等待數分鐘，也不能依賴 App 一直開著。
 - 決定：使用 Supabase `companion_jobs`、原子 enqueue／claim／complete RPC、每分鐘 Cron 與 Zeabur Worker endpoint。
 - 影響：App 送訊息後收到 `202`，再以輪詢取得結果；需處理 lease、重試、每日額度與 Cron 維運。Push 尚未完成。
+- 後續（2026-07-27）：Expo push sender、Mobile Push Token 註冊與 Android 實機遠端推播鏈路已完成；輪詢仍保留為前景狀態同步與 fallback。上述「Push 尚未完成」只描述 ADR 通過當時的狀態。
 
 ## ADR-009：Ava 生活固定以台北時間運行
 
